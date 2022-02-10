@@ -129,4 +129,29 @@ mod tests {
 			private: Some(true),
 		})));
 	}
+	
+	#[test]
+	fn test_metainfo_into() {
+		// minimal
+		assert_eq!(encode(MetaInfo {
+			info: Info { piece_length: 0, pieces: "".to_owned(), private: None },
+			announce: "".to_owned(),
+			announce_list: None,
+			comment: None,
+			created_by: None,
+			creation_date: None,
+			encoding: None,
+		}), "d8:announce0:4:infod12:piece lengthi0e6:pieces0:ee");
+		
+		// all options
+		assert_eq!(encode(MetaInfo {
+			info: Info { piece_length: 5, pieces: "123456".to_owned(), private: Some(false) },
+			announce: "no".to_owned(),
+			announce_list: Some("12345".to_owned()),
+			comment: Some("no comment".to_owned()),
+			created_by: Some("me".to_owned()),
+			creation_date: Some(0),
+			encoding: Some("utf-8".to_owned()),
+		}), "d8:announce2:no13:announce-list5:123457:comment10:no comment10:created by2:me13:creation datei0e8:encoding5:utf-84:infod12:piece lengthi5e6:pieces6:1234567:privatei0eee");
+	}
 }
