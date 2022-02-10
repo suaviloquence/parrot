@@ -5,8 +5,10 @@ use std::{collections::BTreeMap, str::Chars};
 #[derive(Debug, PartialEq)]
 pub struct DataParseError(&'static str);
 
-#[derive(PartialEq, Debug)]
+#[derive(Debug)]
 pub enum Data {
+	/// unsigned integer type.  will always be decoded before i64
+	UInt(u64),
 	Int(i64),
 	String(String),
 	List(Vec<Data>),
@@ -15,10 +17,30 @@ pub enum Data {
 	End,
 }
 
+impl PartialEq for Data {
+	fn eq(&self, other: &Self) -> bool {
+		match (self, other) {
+			(Self::Int(l0), Self::Int(r0)) => l0 == r0,
+			(Self::Int(a), Self::UInt(b)) | (Self::UInt(b), Self::Int(a)) => {
+				match i64::try_from(*b) {
+					Ok(i) => &i == a,
+					Err(_) => false,
+				}
+			}
+			(Self::UInt(l0), Self::UInt(r0)) => l0 == r0,
+			(Self::String(l0), Self::String(r0)) => l0 == r0,
+			(Self::List(l0), Self::List(r0)) => l0 == r0,
+			(Self::Dictionary(l0), Self::Dictionary(r0)) => l0 == r0,
+			_ => core::mem::discriminant(self) == core::mem::discriminant(other),
+		}
+	}
+}
+
 pub fn encode<T: Into<Data>>(data: T) -> String {
 	let data = data.into();
 	match data {
 		Data::String(s) => format!("{}:{}", s.len(), s),
+		Data::UInt(u) => format!("i{}e", u),
 		Data::Int(i) => format!("i{}e", i),
 		Data::List(list) => {
 			let mut buf = String::from('l');
@@ -51,13 +73,13 @@ pub fn decode(chars: &mut Chars) -> Result<Data, DataParseError> {
 	};
 
 	if let Some(i) = start.to_digit(10) {
-		let mut len = i;
+		let mut len: u64 = i as u64;
 		while let Some(ch) = chars.next() {
 			if ch == ':' {
 				break;
 			}
 			match ch.to_digit(10) {
-				Some(i) => len = len * 10 + i,
+				Some(i) => len = len * 10 + i as u64,
 				None => return Err(DataParseError("Unexpected non-number.")),
 			};
 		}
@@ -85,6 +107,9 @@ pub fn decode(chars: &mut Chars) -> Result<Data, DataParseError> {
 					return Err(DataParseError("Unexpected non-digit character"));
 				}
 			}
+			if let Ok(u) = buf.parse::<u64>() {
+				return Ok(Data::UInt(u));
+			};
 			// TODO check for -0 and leading zero which are invalid per spec
 			buf.parse::<i64>()
 				.map(|i| Data::Int(i))
@@ -194,6 +219,7 @@ mod tests {
 	#[test]
 	fn test_encode_int() {
 		assert_eq!(encode(Data::Int(3)), "i3e");
+		assert_eq!(encode(Data::UInt(3)), "i3e");
 		assert_eq!(encode(Data::Int(-3)), "i-3e");
 		assert_eq!(encode(Data::Int(0)), "i0e");
 	}
@@ -231,6 +257,10 @@ mod tests {
 	#[test]
 	fn test_decode_int() {
 		assert_decode!("i3e", Data::Int(3));
+		assert_decode!("i3e", Data::UInt(3));
+		assert_decode!(&format!("i{}e", u64::MAX), Data::UInt(u64::MAX));
+		assert_decode!(&format!("i{}e", i64::MAX), Data::Int(i64::MAX));
+		assert_decode!(&format!("i{}e", i64::MIN), Data::Int(i64::MIN));
 		assert_decode!("i-3e", Data::Int(-3));
 		assert_decode!("i0e", Data::Int(0));
 

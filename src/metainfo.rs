@@ -4,8 +4,7 @@ use crate::bencode::Data;
 
 #[derive(PartialEq, Debug)]
 pub struct Info {
-	// TODO change to unsigned
-	piece_length: i64,
+	piece_length: u64,
 	pieces: String,
 	private: Option<bool>,
 }
@@ -13,10 +12,10 @@ pub struct Info {
 impl Into<Data> for Info {
 	fn into(self) -> Data {
 		let mut map = BTreeMap::new();
-		map.insert("piece length".to_owned(), Data::Int(self.piece_length));
+		map.insert("piece length".to_owned(), Data::UInt(self.piece_length));
 		map.insert("pieces".to_owned(), Data::String(self.pieces));
 		if let Some(private) = self.private {
-			map.insert("private".to_owned(), Data::Int(private as i64));
+			map.insert("private".to_owned(), Data::UInt(private as u64));
 		}
 		Data::Dictionary(map)
 	}
@@ -31,7 +30,7 @@ impl TryFrom<Data> for Info {
 	fn try_from(value: Data) -> Result<Self, Self::Error> {
 		if let Data::Dictionary(mut data) = value {
 			let piece_length = match data.remove("piece length") {
-				Some(Data::Int(i)) => i,
+				Some(Data::UInt(u)) => u,
 				_ => return Err(FromDataError),
 			};
 			let pieces = match data.remove("pieces") {
@@ -39,7 +38,7 @@ impl TryFrom<Data> for Info {
 				_ => return Err(FromDataError),
 			};
 			let private = match data.remove("private") {
-				Some(Data::Int(i)) => Some(i != 0),
+				Some(Data::UInt(u)) => Some(u != 0),
 				Some(_) => return Err(FromDataError),
 				None => None,
 			};
@@ -60,8 +59,7 @@ pub struct MetaInfo {
 	info: Info,
 	announce: String,
 	announce_list: Option<String>,
-	// TODO i --> u
-	creation_date: Option<i64>,
+	creation_date: Option<u64>,
 	comment: Option<String>,
 	created_by: Option<String>,
 	encoding: Option<String>,
@@ -78,7 +76,7 @@ impl Into<Data> for MetaInfo {
 		}
 
 		if let Some(creation_date) = self.creation_date {
-			map.insert("creation date", Data::Int(creation_date));
+			map.insert("creation date", Data::UInt(creation_date));
 		}
 
 		if let Some(comment) = self.comment {
@@ -131,7 +129,7 @@ impl TryFrom<Data> for MetaInfo {
 			};
 
 			let creation_date = match value.remove("creation date") {
-				Some(Data::Int(i)) => Some(i),
+				Some(Data::UInt(u)) => Some(u),
 				None => None,
 				_ => return Err(FromDataError),
 			};
