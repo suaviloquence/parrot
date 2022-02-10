@@ -15,7 +15,8 @@ pub enum Data {
 	End,
 }
 
-pub fn encode(data: Data) -> String {
+pub fn encode<T: Into<Data>> (data: T) -> String {
+	let data = data.into();
 	match data {
 		Data::String(s) => format!("{}:{}", s.len(), s),
 		Data::Int(i) => format!("i{}e", i),
@@ -124,6 +125,12 @@ pub fn decode(chars: &mut Chars) -> Result<Data, DataParseError> {
 		_ => Err(DataParseError("Unexpected data type.")),
 	}
 }
+
+pub fn try_decode_from<T: TryFrom<Data>>(data: &str) -> Result<Result<T, T::Error>, DataParseError> {
+	Ok(<T as TryFrom<Data>>::try_from(decode(&mut data.chars())?))
+}
+
+#[allow(unused)]
 mod tests {
   use crate::bencode::*;
 
