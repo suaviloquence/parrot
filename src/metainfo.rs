@@ -55,6 +55,7 @@ impl TryFrom<Data> for Info {
 	}
 }
 
+#[derive(PartialEq, Debug)]
 pub struct MetaInfo {
 	info: Info,
 	announce: String,
@@ -96,6 +97,69 @@ impl Into<Data> for MetaInfo {
 	}
 }
 
+impl TryFrom<Data> for MetaInfo {
+	type Error = FromDataError;
+
+	fn try_from(value: Data) -> Result<Self, Self::Error> {
+		if let Data::Dictionary(mut value) = value {
+			let info = match value.remove("info") {
+				Some(data) => Info::try_from(data)?,
+				_ => return Err(FromDataError),
+			};
+
+			let announce = match value.remove("announce") {
+				Some(Data::String(s)) => s,
+				_ => return Err(FromDataError),
+			};
+
+			let announce_list = match value.remove("announce-list") {
+				Some(Data::String(s)) => Some(s),
+				None => None,
+				_ => return Err(FromDataError),
+			};
+
+			let comment = match value.remove("comment") {
+				Some(Data::String(s)) => Some(s),
+				None => None,
+				_ => return Err(FromDataError),
+			};
+
+			let created_by = match value.remove("created by") {
+				Some(Data::String(s)) => Some(s),
+				None => None,
+				_ => return Err(FromDataError),
+			};
+
+			let creation_date = match value.remove("creation date") {
+				Some(Data::Int(i)) => Some(i),
+				None => None,
+				_ => return Err(FromDataError),
+			};
+
+			let encoding = match value.remove("encoding") {
+				Some(Data::String(s)) => Some(s),
+				None => None,
+				_ => return Err(FromDataError),
+			};
+
+			
+			
+			Ok(Self {
+				info,
+				announce,
+				announce_list,
+				comment,
+				created_by,
+				creation_date,
+				encoding,
+			})
+		} else {
+			Err(FromDataError)
+		}
+	}
+}
+
+#[allow(unused)]
 mod tests {
 	use crate::bencode::*;
 	use crate::metainfo::*;
@@ -153,5 +217,31 @@ mod tests {
 			creation_date: Some(0),
 			encoding: Some("utf-8".to_owned()),
 		}), "d8:announce2:no13:announce-list5:123457:comment10:no comment10:created by2:me13:creation datei0e8:encoding5:utf-84:infod12:piece lengthi5e6:pieces6:1234567:privatei0eee");
+	}
+
+	#[test]
+	fn test_metainfo_from() {
+		// minimal
+		assert_eq!(try_decode_from("d8:announce0:4:infod12:piece lengthi0e6:pieces0:ee"),
+		Ok(Ok(MetaInfo {
+			info: Info { piece_length: 0, pieces: "".to_owned(), private: None },
+			announce: "".to_owned(),
+			announce_list: None,
+			comment: None,
+			created_by: None,
+			creation_date: None,
+			encoding: None,
+		})));
+
+		assert_eq!(try_decode_from("d8:announce2:no13:announce-list5:123457:comment10:no comment10:created by2:me13:creation datei0e8:encoding5:utf-84:infod12:piece lengthi5e6:pieces6:1234567:privatei0eee"),
+			Ok(Ok(MetaInfo {
+				info: Info { piece_length: 5, pieces: "123456".to_owned(), private: Some(false) },
+				announce: "no".to_owned(),
+				announce_list: Some("12345".to_owned()),
+				comment: Some("no comment".to_owned()),
+				created_by: Some("me".to_owned()),
+				creation_date: Some(0),
+				encoding: Some("utf-8".to_owned()),
+			})));
 	}
 }
