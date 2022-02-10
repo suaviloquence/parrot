@@ -15,7 +15,7 @@ pub enum Data {
 	End,
 }
 
-pub fn encode<T: Into<Data>> (data: T) -> String {
+pub fn encode<T: Into<Data>>(data: T) -> String {
 	let data = data.into();
 	match data {
 		Data::String(s) => format!("{}:{}", s.len(), s),
@@ -27,7 +27,7 @@ pub fn encode<T: Into<Data>> (data: T) -> String {
 			}
 			buf.push('e');
 			buf
-		},
+		}
 		Data::Dictionary(dict) => {
 			let mut buf = String::from('d');
 			for (k, v) in dict {
@@ -35,14 +35,13 @@ pub fn encode<T: Into<Data>> (data: T) -> String {
 			}
 			buf.push('e');
 			buf
-		},
+		}
 		Data::End => panic!("Don't use Data::End to encode"),
-	}	
+	}
 }
 
-
 fn is_digit(c: &char) -> bool {
-	c >= &'0' && c <= &'9'	
+	c >= &'0' && c <= &'9'
 }
 
 pub fn decode(chars: &mut Chars) -> Result<Data, DataParseError> {
@@ -50,11 +49,13 @@ pub fn decode(chars: &mut Chars) -> Result<Data, DataParseError> {
 		Some(b) => b,
 		None => return Err(DataParseError("Empty string.")),
 	};
-	
+
 	if let Some(i) = start.to_digit(10) {
 		let mut len = i;
 		while let Some(ch) = chars.next() {
-			if ch == ':' {break;}
+			if ch == ':' {
+				break;
+			}
 			match ch.to_digit(10) {
 				Some(i) => len = len * 10 + i,
 				None => return Err(DataParseError("Unexpected non-number.")),
@@ -67,15 +68,17 @@ pub fn decode(chars: &mut Chars) -> Result<Data, DataParseError> {
 				None => return Err(DataParseError("Unexpected end of data.")),
 			}
 		}
-		return Ok(Data::String(buf))
+		return Ok(Data::String(buf));
 	}
-	
+
 	match start {
 		'e' => Ok(Data::End),
 		'i' => {
 			let mut buf = String::new();
 			while let Some(ch) = chars.next() {
-				if ch == 'e' {break;}
+				if ch == 'e' {
+					break;
+				}
 				if (ch == '-' && buf.len() == 0) || is_digit(&ch) {
 					buf.push(ch);
 				} else {
@@ -83,23 +86,25 @@ pub fn decode(chars: &mut Chars) -> Result<Data, DataParseError> {
 				}
 			}
 			// TODO check for -0 and leading zero which are invalid per spec
-			buf.parse::<i64>().map(|i| Data::Int(i)).map_err(|_| DataParseError("Not an integer."))
-		},
+			buf.parse::<i64>()
+				.map(|i| Data::Int(i))
+				.map_err(|_| DataParseError("Not an integer."))
+		}
 		'l' => {
 			let mut vec = Vec::new();
-			
+
 			loop {
-				match decode(chars){
+				match decode(chars) {
 					Ok(Data::End) => break,
 					Ok(it) => vec.push(it),
 					Err(err) => return Err(err),
 				};
 			}
 			Ok(Data::List(vec))
-		},
+		}
 		'd' => {
 			let mut map = BTreeMap::new();
-			
+
 			loop {
 				let key = match decode(chars) {
 					Ok(Data::End) => break,
@@ -107,15 +112,15 @@ pub fn decode(chars: &mut Chars) -> Result<Data, DataParseError> {
 					Ok(_) => return Err(DataParseError("Unexpected non-key type.")),
 					err => return err,
 				};
-				
+
 				let value = match decode(chars) {
 					Ok(Data::End) => return Err(DataParseError("Unexpected end of dictionary.")),
 					Ok(val) => val,
 					err => return err,
 				};
-				
+
 				if map.contains_key(&key) {
-					return Err(DataParseError("Key already in dictionary"))
+					return Err(DataParseError("Key already in dictionary"));
 				}
 				map.insert(key, value);
 			}
@@ -126,20 +131,22 @@ pub fn decode(chars: &mut Chars) -> Result<Data, DataParseError> {
 	}
 }
 
-pub fn try_decode_from<T: TryFrom<Data>>(data: &str) -> Result<Result<T, T::Error>, DataParseError> {
+pub fn try_decode_from<T: TryFrom<Data>>(
+	data: &str,
+) -> Result<Result<T, T::Error>, DataParseError> {
 	Ok(<T as TryFrom<Data>>::try_from(decode(&mut data.chars())?))
 }
 
 #[allow(unused)]
 mod tests {
-  use crate::bencode::*;
+	use crate::bencode::*;
 
 	macro_rules! str {
 		($x:expr) => {
 			Data::String($x.to_string())
 		};
 	}
-	
+
 	macro_rules! list {
 		($($x: expr),*) => {
 			{
@@ -152,7 +159,7 @@ mod tests {
 			}
 		};
 	}
-	
+
 	macro_rules! dict {
 		($(($x: expr, $v: expr)),*) => {
 			{
@@ -165,13 +172,13 @@ mod tests {
 			}
 		};
 	}
-	
+
 	macro_rules! assert_decode {
 		($str: expr, $data: expr) => {
-			assert_eq!(decode(&mut $str.chars()), Ok($data))	
+			assert_eq!(decode(&mut $str.chars()), Ok($data))
 		};
 	}
-	
+
 	macro_rules! assert_decode_err {
 		($str: expr) => {
 			assert!(decode(&mut $str.chars()).is_err())
@@ -183,121 +190,118 @@ mod tests {
 		assert_eq!(encode(str!("spam")), "4:spam");
 		assert_eq!(encode(str!("")), "0:");
 	}
-	
+
 	#[test]
 	fn test_encode_int() {
 		assert_eq!(encode(Data::Int(3)), "i3e");
 		assert_eq!(encode(Data::Int(-3)), "i-3e");
 		assert_eq!(encode(Data::Int(0)), "i0e");
 	}
-	
+
 	#[test]
 	fn test_encode_list() {
 		assert_eq!(encode(list!(str!("spam"), str!("eggs"))), "l4:spam4:eggse");
 		assert_eq!(encode(list!()), "le");
 	}
-	
+
 	#[test]
 	fn test_encode_dict() {
-		assert_eq!(encode(dict!(("cow", str!("moo")), ("spam", str!("eggs")))), "d3:cow3:moo4:spam4:eggse");
-
-		assert_eq!(encode(
-			dict!(
-				("spam", list!(str!("a"), str!("b")))
-			)
-		),
-		"d4:spaml1:a1:bee");
-		
 		assert_eq!(
-			encode(
-				dict!(
-					("publisher", str!("bob")),
-					("publisher-webpage", str!("www.example.com")),
-					("publisher.location", str!("home"))
-				)
-			),
+			encode(dict!(("cow", str!("moo")), ("spam", str!("eggs")))),
+			"d3:cow3:moo4:spam4:eggse"
+		);
+
+		assert_eq!(
+			encode(dict!(("spam", list!(str!("a"), str!("b"))))),
+			"d4:spaml1:a1:bee"
+		);
+
+		assert_eq!(
+			encode(dict!(
+				("publisher", str!("bob")),
+				("publisher-webpage", str!("www.example.com")),
+				("publisher.location", str!("home"))
+			)),
 			"d9:publisher3:bob17:publisher-webpage15:www.example.com18:publisher.location4:homee"
 		);
-		
+
 		assert_eq!(encode(dict!()), "de");
 	}
-	
-	
+
 	#[test]
 	fn test_decode_int() {
 		assert_decode!("i3e", Data::Int(3));
 		assert_decode!("i-3e", Data::Int(-3));
 		assert_decode!("i0e", Data::Int(0));
-		
+
 		// empty
 		assert_decode_err!("ie");
-		
+
 		// just a negative sign
 		assert_decode_err!("i-e");
-		
+
 		// negative sign in invalid place
 		assert_decode_err!("i1-e");
 	}
-	
+
 	#[test]
 	fn test_decode_str() {
 		assert_decode!("4:four", str!("four"));
 		assert_decode!("0:", str!(""));
-		
+
 		// not enough length
 		assert_decode_err!("4:123");
-		
+
 		// invalid length marker
 		assert_decode_err!("4x:1234");
-	
 	}
 	#[test]
 	fn test_decode_list() {
 		assert_decode!("l4:spam4:eggse", list!(str!("spam"), str!("eggs")));
 		assert_decode!("le", list!());
-		
+
 		// no ending
 		assert_decode_err!("lle");
-		
+
 		// skip over end markers in string
 		assert_decode_err!("l4:eeee");
-		
+
 		// invalid inner data
 		assert_decode_err!("l0:a0:e");
 	}
-	
+
 	#[test]
 	fn test_decode_dict() {
-		assert_decode!("d3:cow3:moo4:spam4:eggse",
+		assert_decode!(
+			"d3:cow3:moo4:spam4:eggse",
 			dict!(("cow", str!("moo")), ("spam", str!("eggs")))
 		);
 
-		assert_decode!("d4:spaml1:a1:bee",
-			dict!(
-				("spam", list!(str!("a"), str!("b")))
-			)
+		assert_decode!(
+			"d4:spaml1:a1:bee",
+			dict!(("spam", list!(str!("a"), str!("b"))))
 		);
-		
-			
-		assert_decode!("d9:publisher3:bob17:publisher-webpage15:www.example.com18:publisher.location4:homee",
+
+		assert_decode!(
+			"d9:publisher3:bob17:publisher-webpage15:www.example.com18:publisher.location4:homee",
 			dict!(
 				("publisher", str!("bob")),
 				("publisher-webpage", str!("www.example.com")),
 				("publisher.location", str!("home"))
 			)
 		);
-		
+
 		assert_decode!("de", dict!());
-		
+
 		// no ending
 		assert_decode_err!("dde");
 
 		// duplicate keys
 		assert_decode_err!("d1:a3:dup1:a3:nooe");
-		
+
 		// non-string as key
 		assert_decode_err!("di2e3:vale");
-		
+
 		// invalid inner data
 		assert_decode_err!("d0:a0:e");
 	}

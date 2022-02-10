@@ -18,7 +18,7 @@ impl Into<Data> for Info {
 		if let Some(private) = self.private {
 			map.insert("private".to_owned(), Data::Int(private as i64));
 		}
-		Data::Dictionary(map)	
+		Data::Dictionary(map)
 	}
 }
 
@@ -142,8 +142,6 @@ impl TryFrom<Data> for MetaInfo {
 				_ => return Err(FromDataError),
 			};
 
-			
-			
 			Ok(Self {
 				info,
 				announce,
@@ -166,47 +164,66 @@ mod tests {
 
 	#[test]
 	fn test_info_into() {
-		assert_eq!(encode(Info {
-			piece_length: 20,
-			pieces: "12345678901234567890".to_owned(),
-			private: Some(true),
-		}), "d12:piece lengthi20e6:pieces20:123456789012345678907:privatei1ee");
+		assert_eq!(
+			encode(Info {
+				piece_length: 20,
+				pieces: "12345678901234567890".to_owned(),
+				private: Some(true),
+			}),
+			"d12:piece lengthi20e6:pieces20:123456789012345678907:privatei1ee"
+		);
 
-		assert_eq!(encode(Info {
-			piece_length: 1,
-			pieces: "12345678901234567890".to_owned(),
-			private: None,
-		}), "d12:piece lengthi1e6:pieces20:12345678901234567890e");
+		assert_eq!(
+			encode(Info {
+				piece_length: 1,
+				pieces: "12345678901234567890".to_owned(),
+				private: None,
+			}),
+			"d12:piece lengthi1e6:pieces20:12345678901234567890e"
+		);
 	}
-	
+
 	#[test]
 	fn test_info_from() {
-		assert_eq!(try_decode_from("d12:piece lengthi0e6:pieces0:e"), Ok(Ok(Info {
-			piece_length: 0,
-			pieces: "".to_string(),
-			private: None,
-		})));
-		
-		assert_eq!(try_decode_from("d12:piece lengthi20e6:pieces20:012345678901234567897:privatei1ee"), Ok(Ok(Info {
-			piece_length: 20,
-			pieces: "01234567890123456789".to_string(),
-			private: Some(true),
-		})));
+		assert_eq!(
+			try_decode_from("d12:piece lengthi0e6:pieces0:e"),
+			Ok(Ok(Info {
+				piece_length: 0,
+				pieces: "".to_string(),
+				private: None,
+			}))
+		);
+
+		assert_eq!(
+			try_decode_from("d12:piece lengthi20e6:pieces20:012345678901234567897:privatei1ee"),
+			Ok(Ok(Info {
+				piece_length: 20,
+				pieces: "01234567890123456789".to_string(),
+				private: Some(true),
+			}))
+		);
 	}
-	
+
 	#[test]
 	fn test_metainfo_into() {
 		// minimal
-		assert_eq!(encode(MetaInfo {
-			info: Info { piece_length: 0, pieces: "".to_owned(), private: None },
-			announce: "".to_owned(),
-			announce_list: None,
-			comment: None,
-			created_by: None,
-			creation_date: None,
-			encoding: None,
-		}), "d8:announce0:4:infod12:piece lengthi0e6:pieces0:ee");
-		
+		assert_eq!(
+			encode(MetaInfo {
+				info: Info {
+					piece_length: 0,
+					pieces: "".to_owned(),
+					private: None
+				},
+				announce: "".to_owned(),
+				announce_list: None,
+				comment: None,
+				created_by: None,
+				creation_date: None,
+				encoding: None,
+			}),
+			"d8:announce0:4:infod12:piece lengthi0e6:pieces0:ee"
+		);
+
 		// all options
 		assert_eq!(encode(MetaInfo {
 			info: Info { piece_length: 5, pieces: "123456".to_owned(), private: Some(false) },
@@ -222,16 +239,22 @@ mod tests {
 	#[test]
 	fn test_metainfo_from() {
 		// minimal
-		assert_eq!(try_decode_from("d8:announce0:4:infod12:piece lengthi0e6:pieces0:ee"),
-		Ok(Ok(MetaInfo {
-			info: Info { piece_length: 0, pieces: "".to_owned(), private: None },
-			announce: "".to_owned(),
-			announce_list: None,
-			comment: None,
-			created_by: None,
-			creation_date: None,
-			encoding: None,
-		})));
+		assert_eq!(
+			try_decode_from("d8:announce0:4:infod12:piece lengthi0e6:pieces0:ee"),
+			Ok(Ok(MetaInfo {
+				info: Info {
+					piece_length: 0,
+					pieces: "".to_owned(),
+					private: None
+				},
+				announce: "".to_owned(),
+				announce_list: None,
+				comment: None,
+				created_by: None,
+				creation_date: None,
+				encoding: None,
+			}))
+		);
 
 		assert_eq!(try_decode_from("d8:announce2:no13:announce-list5:123457:comment10:no comment10:created by2:me13:creation datei0e8:encoding5:utf-84:infod12:piece lengthi5e6:pieces6:1234567:privatei0eee"),
 			Ok(Ok(MetaInfo {
