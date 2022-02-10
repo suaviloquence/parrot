@@ -121,6 +121,12 @@ mod tests {
 			piece_length: 0,
 			pieces: "".to_string(),
 			private: None,
-		})))
+		})));
+		
+		assert_eq!(try_decode_from("d12:piece lengthi20e6:pieces20:012345678901234567897:privatei1ee"), Ok(Ok(Info {
+			piece_length: 20,
+			pieces: "01234567890123456789".to_string(),
+			private: Some(true),
+		})));
 	}
 }
