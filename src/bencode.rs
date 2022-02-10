@@ -15,6 +15,15 @@ pub enum Data {
 	End,
 }
 
+// TODO derive
+pub trait Encode {
+	fn encode(&self) -> Data;
+}
+
+pub trait Decode : Sized {
+	fn decode(data: Data) -> Result<Self, DataParseError>;
+}
+
 pub fn encode(data: Data) -> String {
 	match data {
 		Data::String(s) => format!("{}:{}", s.len(), s),
