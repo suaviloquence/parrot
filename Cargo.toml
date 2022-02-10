@@ -1,6 +1,7 @@
 [package]
 name = "parrot"
 description = "The pirate's canary"
+license = "MIT"
 version = "0.1.0"
 edition = "2021"
 
