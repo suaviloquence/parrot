@@ -2,6 +2,43 @@ use std::collections::BTreeMap;
 
 use crate::bencode::Data;
 
+#[derive(Debug, PartialEq)]
+pub struct File {
+	length: u64,
+	md5sum: Option<[char; 32]>,
+	path: Vec<String>,
+}
+
+impl Into<Data> for File {
+	fn into(self) -> Data {
+		let mut map = BTreeMap::new();
+		map.insert("length", Data::UInt(self.length));
+		map.insert(
+			"path",
+			Data::List(self.path.into_iter().map(|s| Data::String(s)).collect()),
+		);
+		if let Some(md5sum) = self.md5sum {
+			map.insert("md5sum", Data::String(md5sum.into_iter().collect()));
+		}
+		Data::Dictionary(map.into_iter().map(|(k, v)| (k.to_owned(), v)).collect())
+	}
+}
+
+
+
+#[derive(Debug, PartialEq)]
+pub enum FileInfo {
+	Single {
+		length: u64,
+		md5sum: Option<[char; 32]>,
+		name: String,
+	},
+	Multi {
+		name: String,
+		files: Vec<File>,
+	},
+}
+
 #[derive(PartialEq, Debug)]
 pub struct Info {
 	piece_length: u64,
@@ -159,6 +196,29 @@ impl TryFrom<Data> for MetaInfo {
 mod tests {
 	use crate::bencode::*;
 	use crate::metainfo::*;
+
+	#[test]
+	fn test_file_into() {
+		// without md5sum
+		assert_eq!(
+			encode(File {
+				length: 40,
+				md5sum: None,
+				path: vec!["20", "30"]
+					.into_iter()
+					.map(|s| s.to_string())
+					.collect()
+			}),
+			"d6:lengthi40e4:pathl2:202:30ee"
+		);
+
+		// with
+		assert_eq!(encode(File {
+			length: 25,
+			md5sum: Some(['a'; 32]),
+			path: vec!["usr", "bin", "env", "rustc"].into_iter().map(&str::to_owned).collect(),
+		}), "d6:lengthi25e6:md5sum32:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa4:pathl3:usr3:bin3:env5:rustcee")
+	}
 
 	#[test]
 	fn test_info_into() {
