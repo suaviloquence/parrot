@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 
 use crate::bencode::Data;
 
+#[derive(PartialEq, Debug)]
 pub struct Info {
 	// TODO change to unsigned
 	piece_length: i64,
@@ -21,6 +22,7 @@ impl Into<Data> for Info {
 	}
 }
 
+#[derive(Debug, PartialEq)]
 pub struct FromDataError;
 
 impl TryFrom<Data> for Info {
@@ -111,5 +113,14 @@ mod tests {
 			pieces: "12345678901234567890".to_owned(),
 			private: None,
 		}), "d12:piece lengthi1e6:pieces20:12345678901234567890e");
+	}
+	
+	#[test]
+	fn test_info_from() {
+		assert_eq!(try_decode_from("d12:piece lengthi0e6:pieces0:e"), Ok(Ok(Info {
+			piece_length: 0,
+			pieces: "".to_string(),
+			private: None,
+		})))
 	}
 }
