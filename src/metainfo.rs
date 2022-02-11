@@ -112,6 +112,54 @@ impl Into<Data> for FileInfo {
 	}
 }
 
+impl TryFrom<Data> for FileInfo {
+	type Error = FromDataError;
+
+	fn try_from(value: Data) -> Result<Self, Self::Error> {
+		if let Data::Dictionary(mut data) = value {
+			let name = match data.remove("name") {
+				Some(Data::String(s)) => s,
+				_ => return Err(FromDataError),
+			};
+
+			if let Some(Data::List(l)) = data.remove("files") {
+				let mut files = Vec::new();
+
+				for file in l {
+					files.push(File::try_from(file)?);
+				}
+
+				Ok(Self::Multi { name, files })
+			} else {
+				let length = match data.remove("length") {
+					Some(Data::UInt(u)) => u,
+					_ => return Err(FromDataError),
+				};
+
+				let md5sum = match data.remove("md5sum") {
+					Some(Data::String(s)) => s
+						.chars()
+						.collect::<Vec<_>>()
+						.as_slice()
+						.try_into()
+						.map(|c| Some(c))
+						.map_err(|_| FromDataError)?,
+					None => None,
+					_ => return Err(FromDataError),
+				};
+
+				Ok(Self::Single {
+					name,
+					length,
+					md5sum,
+				})
+			}
+		} else {
+			Err(FromDataError)
+		}
+	}
+}
+
 #[derive(PartialEq, Debug)]
 pub struct Info {
 	piece_length: u64,
@@ -375,6 +423,77 @@ mod tests {
 			}),
 			"d5:filesld6:lengthi2e6:md5sum32:222222222222222222222222222222224:pathl3:one3:twoeed6:lengthi4e4:pathleee4:name7:hulkinge"
 		);
+	}
+
+	#[test]
+	fn test_fileinfo_from() {
+		// single without md5sum
+		assert_eq!(
+			try_decode_from("d6:lengthi5e4:name9:cats.jpege"),
+			Ok(Ok((FileInfo::Single {
+				length: 5,
+				name: "cats.jpeg".to_owned(),
+				md5sum: None
+			})))
+		);
+
+		// single with md5sum
+		assert_eq!(
+			try_decode_from(
+				"d6:lengthi0e6:md5sum32:555555555555555555555555555555554:name13:cows and catse"
+			),
+			Ok(Ok((FileInfo::Single {
+				length: 0,
+				name: "cows and cats".to_owned(),
+				md5sum: Some(['5'; 32])
+			})))
+		);
+
+		// minimal multi
+		assert_eq!(
+			try_decode_from("d5:filesle4:name2:mte"),
+			Ok(Ok((FileInfo::Multi {
+				name: "mt".to_owned(),
+				files: vec![]
+			}))),
+		);
+
+		// substantial multi
+		assert_eq!(
+			try_decode_from("d5:filesld6:lengthi2e6:md5sum32:222222222222222222222222222222224:pathl3:one3:twoeed6:lengthi4e4:pathleee4:name7:hulkinge"),
+			Ok(Ok((FileInfo::Multi {
+				name: "hulking".to_owned(),
+				files: vec![
+					// one with a md5
+					File {
+						length: 2,
+						md5sum: Some(['2'; 32]),
+						path: vec!["one".to_owned(), "two".to_owned()],
+					},
+					// one without, and with no path
+					File {
+						length: 4,
+						md5sum: None,
+						path: vec![],
+					}
+				],
+			})))
+		);
+
+		// wrong md5 length
+		assert!(
+			try_decode_from::<FileInfo>("d6:lengthi0e6:md5sum0:4:name0:e")
+				.unwrap()
+				.is_err()
+		);
+
+		// bad files
+		assert!(
+			// length is string
+			try_decode_from::<FileInfo>("d5:filesld6:length0:4:pathlee4:name8:bad pathee")
+				.unwrap()
+				.is_err()
+		)
 	}
 
 	#[test]
