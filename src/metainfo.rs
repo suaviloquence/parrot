@@ -342,10 +342,12 @@ mod tests {
 
 		// with
 		assert_eq!(encode(File {
-			length: 25,
-			md5sum: Some(['a'; 32]),
-			path: vec!["usr", "bin", "env", "rustc"].into_iter().map(&str::to_owned).collect(),
-		}), "d6:lengthi25e6:md5sum32:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa4:pathl3:usr3:bin3:env5:rustcee")
+				length: 25,
+				md5sum: Some(['a'; 32]),
+				path: vec!["usr", "bin", "env", "rustc"].into_iter().map(&str::to_owned).collect(),
+			}),
+			"d6:lengthi25e6:md5sum32:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa4:pathl3:usr3:bin3:env5:rustcee"
+		);
 	}
 
 	#[test]
@@ -363,7 +365,9 @@ mod tests {
 		);
 
 		assert_eq!(
-			try_decode_from("d6:lengthi25e6:md5sum32:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa4:pathl3:usr3:bin3:env5:rustcee"),
+			try_decode_from(
+				"d6:lengthi25e6:md5sum32:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa4:pathl3:usr3:bin3:env5:rustcee"
+			),
 			Ok(Ok(File {
 				length: 25,
 				md5sum: Some(['a'; 32]),
@@ -372,7 +376,9 @@ mod tests {
 		);
 
 		// md5 of length 31 (Ok(Err(_))
-		assert!(try_decode_from::<File>("d6:lengthi25e6:md5sum31:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa4:pathl3:usr3:bin3:env5:rustcee").unwrap().is_err());
+		assert!(try_decode_from::<File>(
+			"d6:lengthi25e6:md5sum31:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa4:pathl3:usr3:bin3:env5:rustcee"
+		).unwrap().is_err());
 
 		// missing stuff
 		assert!(try_decode_from::<File>("de").unwrap().is_err());
@@ -467,7 +473,9 @@ mod tests {
 
 		// substantial multi
 		assert_eq!(
-			try_decode_from("d5:filesld6:lengthi2e6:md5sum32:222222222222222222222222222222224:pathl3:one3:twoeed6:lengthi4e4:pathleee4:name7:hulkinge"),
+			try_decode_from(
+				"d5:filesld6:lengthi2e6:md5sum32:222222222222222222222222222222224:pathl3:one3:twoeed6:lengthi4e4:pathleee4:name7:hulkinge"
+			),
 			Ok(Ok((FileInfo::Multi {
 				name: "hulking".to_owned(),
 				files: vec![
