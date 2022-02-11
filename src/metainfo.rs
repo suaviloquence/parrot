@@ -85,6 +85,33 @@ pub enum FileInfo {
 	},
 }
 
+impl Into<Data> for FileInfo {
+	fn into(self) -> Data {
+		let mut map = BTreeMap::new();
+		match self {
+			Self::Single {
+				length,
+				md5sum,
+				name,
+			} => {
+				map.insert("length", Data::UInt(length));
+				if let Some(md5sum) = md5sum {
+					map.insert("md5sum", Data::String(md5sum.iter().collect()));
+				}
+				map.insert("name", Data::String(name));
+			}
+			Self::Multi { name, files } => {
+				map.insert("name", Data::String(name));
+				map.insert(
+					"files",
+					Data::List(files.into_iter().map(|f| f.into()).collect()),
+				);
+			}
+		};
+		Data::Dictionary(map.into_iter().map(|(k, v)| (k.to_owned(), v)).collect())
+	}
+}
+
 #[derive(PartialEq, Debug)]
 pub struct Info {
 	piece_length: u64,
@@ -294,6 +321,60 @@ mod tests {
 
 		// missing stuff
 		assert!(try_decode_from::<File>("de").unwrap().is_err());
+	}
+
+	#[test]
+	fn test_fileinfo_into() {
+		// single without md5sum
+		assert_eq!(
+			encode(FileInfo::Single {
+				length: 5,
+				name: "cats.jpeg".to_owned(),
+				md5sum: None
+			}),
+			"d6:lengthi5e4:name9:cats.jpege"
+		);
+
+		// single with md5sum
+		assert_eq!(
+			encode(FileInfo::Single {
+				length: 0,
+				name: "cows and cats".to_owned(),
+				md5sum: Some(['5'; 32])
+			}),
+			"d6:lengthi0e6:md5sum32:555555555555555555555555555555554:name13:cows and catse"
+		);
+
+		// minimal multi
+		assert_eq!(
+			encode(FileInfo::Multi {
+				name: "mt".to_owned(),
+				files: vec![]
+			}),
+			"d5:filesle4:name2:mte"
+		);
+
+		// substantial multi
+		assert_eq!(
+			encode(FileInfo::Multi {
+				name: "hulking".to_owned(),
+				files: vec![
+					// one with a md5
+					File {
+						length: 2,
+						md5sum: Some(['2'; 32]),
+						path: vec!["one".to_owned(), "two".to_owned()],
+					},
+					// one without, and with no path
+					File {
+						length: 4,
+						md5sum: None,
+						path: vec![],
+					}
+				],
+			}),
+			"d5:filesld6:lengthi2e6:md5sum32:222222222222222222222222222222224:pathl3:one3:twoeed6:lengthi4e4:pathleee4:name7:hulkinge"
+		);
 	}
 
 	#[test]
