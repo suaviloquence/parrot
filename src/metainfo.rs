@@ -24,7 +24,53 @@ impl Into<Data> for File {
 	}
 }
 
+impl TryFrom<Data> for File {
+	type Error = FromDataError;
 
+	fn try_from(value: Data) -> Result<Self, Self::Error> {
+		if let Data::Dictionary(mut value) = value {
+			let length = match value.remove("length") {
+				Some(Data::UInt(u)) => u,
+				_ => return Err(FromDataError),
+			};
+
+			let md5sum = match value.remove("md5sum") {
+				Some(Data::String(s)) => s
+					.chars()
+					.collect::<Vec<_>>()
+					.as_slice()
+					.try_into()
+					.map(|c| Some(c))
+					.map_err(|_| FromDataError)?,
+				None => None,
+				_ => return Err(FromDataError),
+			};
+
+			let path = match value.remove("path") {
+				Some(Data::List(l)) => {
+					let mut vec = Vec::new();
+					for item in l {
+						if let Data::String(s) = item {
+							vec.push(s);
+						} else {
+							return Err(FromDataError);
+						}
+					}
+					vec
+				}
+				_ => return Err(FromDataError),
+			};
+
+			Ok(Self {
+				length,
+				md5sum,
+				path,
+			})
+		} else {
+			Err(FromDataError)
+		}
+	}
+}
 
 #[derive(Debug, PartialEq)]
 pub enum FileInfo {
@@ -218,6 +264,36 @@ mod tests {
 			md5sum: Some(['a'; 32]),
 			path: vec!["usr", "bin", "env", "rustc"].into_iter().map(&str::to_owned).collect(),
 		}), "d6:lengthi25e6:md5sum32:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa4:pathl3:usr3:bin3:env5:rustcee")
+	}
+
+	#[test]
+	fn test_file_from() {
+		assert_eq!(
+			try_decode_from("d6:lengthi40e4:pathl2:202:30ee"),
+			Ok(Ok(File {
+				length: 40,
+				md5sum: None,
+				path: vec!["20", "30"]
+					.into_iter()
+					.map(|s| s.to_string())
+					.collect()
+			}))
+		);
+
+		assert_eq!(
+			try_decode_from("d6:lengthi25e6:md5sum32:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa4:pathl3:usr3:bin3:env5:rustcee"),
+			Ok(Ok(File {
+				length: 25,
+				md5sum: Some(['a'; 32]),
+				path: vec!["usr", "bin", "env", "rustc"].into_iter().map(&str::to_owned).collect(),
+			}))
+		);
+
+		// md5 of length 31 (Ok(Err(_))
+		assert!(try_decode_from::<File>("d6:lengthi25e6:md5sum31:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa4:pathl3:usr3:bin3:env5:rustcee").unwrap().is_err());
+
+		// missing stuff
+		assert!(try_decode_from::<File>("de").unwrap().is_err());
 	}
 
 	#[test]
