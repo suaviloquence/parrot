@@ -586,67 +586,99 @@ mod tests {
 		);
 	}
 
-	// #[test]
-	// fn test_metainfo_into() {
-	// 	// minimal
-	// 	assert_eq!(
-	// 		encode(MetaInfo {
-	// 			info: Info {
-	// 				piece_length: 0,
-	// 				pieces: "".to_owned(),
-	// 				private: None
-	// 			},
-	// 			announce: "".to_owned(),
-	// 			announce_list: None,
-	// 			comment: None,
-	// 			created_by: None,
-	// 			creation_date: None,
-	// 			encoding: None,
-	// 		}),
-	// 		"d8:announce0:4:infod12:piece lengthi0e6:pieces0:ee"
-	// 	);
+	#[test]
+	fn test_metainfo_into() {
+		// minimal
+		assert_eq!(
+			encode(MetaInfo {
+				info: Info {
+					piece_length: 0,
+					pieces: "".to_owned(),
+					private: None,
+					file_info: FileInfo::Single {
+						length: 2,
+						md5sum: None,
+						name: "file".to_owned(),
+					},
+				},
+				announce: "".to_owned(),
+				announce_list: None,
+				comment: None,
+				created_by: None,
+				creation_date: None,
+				encoding: None,
+			}),
+			"d8:announce0:4:infod6:lengthi2e4:name4:file12:piece lengthi0e6:pieces0:ee"
+		);
 
-	// 	// all options
-	// 	assert_eq!(encode(MetaInfo {
-	// 		info: Info { piece_length: 5, pieces: "123456".to_owned(), private: Some(false) },
-	// 		announce: "no".to_owned(),
-	// 		announce_list: Some("12345".to_owned()),
-	// 		comment: Some("no comment".to_owned()),
-	// 		created_by: Some("me".to_owned()),
-	// 		creation_date: Some(0),
-	// 		encoding: Some("utf-8".to_owned()),
-	// 	}), "d8:announce2:no13:announce-list5:123457:comment10:no comment10:created by2:me13:creation datei0e8:encoding5:utf-84:infod12:piece lengthi5e6:pieces6:1234567:privatei0eee");
-	// }
+		// all options
+		assert_eq!(encode(MetaInfo {
+			info: Info {
+				piece_length: 5,
+				pieces: "123456".to_owned(),
+				private: Some(false),
+				file_info: FileInfo::Multi {
+					files: vec![],
+					name: "folder".to_owned(),
+				}
+			},
+			announce: "no".to_owned(),
+			announce_list: Some("12345".to_owned()),
+			comment: Some("no comment".to_owned()),
+			created_by: Some("me".to_owned()),
+			creation_date: Some(0),
+			encoding: Some("utf-8".to_owned()),
+		}),
+		"d8:announce2:no13:announce-list5:123457:comment10:no comment10:created by2:me13:creation datei0e8:encoding5:utf-84:infod5:filesle4:name6:folder12:piece lengthi5e6:pieces6:1234567:privatei0eee"
+	);
+	}
 
-	// #[test]
-	// fn test_metainfo_from() {
-	// 	// minimal
-	// 	assert_eq!(
-	// 		try_decode_from("d8:announce0:4:infod12:piece lengthi0e6:pieces0:ee"),
-	// 		Ok(Ok(MetaInfo {
-	// 			info: Info {
-	// 				piece_length: 0,
-	// 				pieces: "".to_owned(),
-	// 				private: None
-	// 			},
-	// 			announce: "".to_owned(),
-	// 			announce_list: None,
-	// 			comment: None,
-	// 			created_by: None,
-	// 			creation_date: None,
-	// 			encoding: None,
-	// 		}))
-	// 	);
+	#[test]
+	fn test_metainfo_from() {
+		// minimal
+		assert_eq!(
+			try_decode_from(
+				"d8:announce0:4:infod6:lengthi2e4:name4:file12:piece lengthi0e6:pieces0:ee"
+			),
+			Ok(Ok(MetaInfo {
+				info: Info {
+					piece_length: 0,
+					pieces: "".to_owned(),
+					private: None,
+					file_info: FileInfo::Single {
+						length: 2,
+						md5sum: None,
+						name: "file".to_owned(),
+					},
+				},
+				announce: "".to_owned(),
+				announce_list: None,
+				comment: None,
+				created_by: None,
+				creation_date: None,
+				encoding: None,
+			}))
+		);
 
-	// 	assert_eq!(try_decode_from("d8:announce2:no13:announce-list5:123457:comment10:no comment10:created by2:me13:creation datei0e8:encoding5:utf-84:infod12:piece lengthi5e6:pieces6:1234567:privatei0eee"),
-	// 		Ok(Ok(MetaInfo {
-	// 			info: Info { piece_length: 5, pieces: "123456".to_owned(), private: Some(false) },
-	// 			announce: "no".to_owned(),
-	// 			announce_list: Some("12345".to_owned()),
-	// 			comment: Some("no comment".to_owned()),
-	// 			created_by: Some("me".to_owned()),
-	// 			creation_date: Some(0),
-	// 			encoding: Some("utf-8".to_owned()),
-	// 		})));
-	// }
+		assert_eq!(try_decode_from(
+			"d8:announce2:no13:announce-list5:123457:comment10:no comment10:created by2:me13:creation datei0e8:encoding5:utf-84:infod5:filesle4:name6:folder12:piece lengthi5e6:pieces6:1234567:privatei0eee"
+			),
+			Ok(Ok(MetaInfo {
+				info: Info {
+					piece_length: 5,
+					pieces: "123456".to_owned(),
+					private: Some(false),
+					file_info: FileInfo::Multi {
+						files: vec![],
+						name: "folder".to_owned(),
+					}
+				},
+				announce: "no".to_owned(),
+				announce_list: Some("12345".to_owned()),
+				comment: Some("no comment".to_owned()),
+				created_by: Some("me".to_owned()),
+				creation_date: Some(0),
+				encoding: Some("utf-8".to_owned()),
+			})));
+	}
 }
