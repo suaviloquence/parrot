@@ -320,7 +320,7 @@ impl TryFrom<Data> for MetaInfo {
 	}
 }
 
-#[allow(unused)]
+#[cfg(test)]
 mod tests {
 	use crate::bencode::*;
 	use crate::metainfo::*;

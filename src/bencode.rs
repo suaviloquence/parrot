@@ -162,7 +162,7 @@ pub fn try_decode_from<T: TryFrom<Data>>(
 	Ok(<T as TryFrom<Data>>::try_from(decode(&mut data.chars())?))
 }
 
-#[allow(unused)]
+#[cfg(test)]
 mod tests {
 	use crate::bencode::*;
 
