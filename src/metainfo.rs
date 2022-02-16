@@ -5,7 +5,7 @@ use crate::bencode::Data;
 #[derive(Debug, PartialEq)]
 pub struct File {
 	length: u64,
-	md5sum: Option<[char; 32]>,
+	md5sum: Option<[u8; 32]>,
 	path: Vec<String>,
 }
 
@@ -18,7 +18,10 @@ impl Into<Data> for File {
 			Data::List(self.path.into_iter().map(|s| Data::String(s)).collect()),
 		);
 		if let Some(md5sum) = self.md5sum {
-			map.insert("md5sum", Data::String(md5sum.into_iter().collect()));
+			map.insert(
+				"md5sum",
+				Data::String(String::from_utf8_lossy(&md5sum).into_owned()),
+			);
 		}
 		Data::Dictionary(map.into_iter().map(|(k, v)| (k.to_owned(), v)).collect())
 	}
@@ -36,7 +39,7 @@ impl TryFrom<Data> for File {
 
 			let md5sum = match value.remove("md5sum") {
 				Some(Data::String(s)) => s
-					.chars()
+					.bytes()
 					.collect::<Vec<_>>()
 					.as_slice()
 					.try_into()
@@ -76,7 +79,7 @@ impl TryFrom<Data> for File {
 pub enum FileInfo {
 	Single {
 		length: u64,
-		md5sum: Option<[char; 32]>,
+		md5sum: Option<[u8; 32]>,
 		name: String,
 	},
 	Multi {
@@ -96,7 +99,10 @@ impl Into<Data> for FileInfo {
 			} => {
 				map.insert("length", Data::UInt(length));
 				if let Some(md5sum) = md5sum {
-					map.insert("md5sum", Data::String(md5sum.iter().collect()));
+					map.insert(
+						"md5sum",
+						Data::String(String::from_utf8_lossy(&md5sum).into_owned()),
+					);
 				}
 				map.insert("name", Data::String(name));
 			}
@@ -138,7 +144,7 @@ impl TryFrom<Data> for FileInfo {
 
 				let md5sum = match data.remove("md5sum") {
 					Some(Data::String(s)) => s
-						.chars()
+						.bytes()
 						.collect::<Vec<_>>()
 						.as_slice()
 						.try_into()
@@ -343,7 +349,7 @@ mod tests {
 		// with
 		assert_eq!(encode(File {
 				length: 25,
-				md5sum: Some(['a'; 32]),
+				md5sum: Some([b'a'; 32]),
 				path: vec!["usr", "bin", "env", "rustc"].into_iter().map(&str::to_owned).collect(),
 			}),
 			"d6:lengthi25e6:md5sum32:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa4:pathl3:usr3:bin3:env5:rustcee"
@@ -370,7 +376,7 @@ mod tests {
 			),
 			Ok(Ok(File {
 				length: 25,
-				md5sum: Some(['a'; 32]),
+				md5sum: Some([b'a'; 32]),
 				path: vec!["usr", "bin", "env", "rustc"].into_iter().map(&str::to_owned).collect(),
 			}))
 		);
@@ -401,7 +407,7 @@ mod tests {
 			encode(FileInfo::Single {
 				length: 0,
 				name: "cows and cats".to_owned(),
-				md5sum: Some(['5'; 32])
+				md5sum: Some([b'5'; 32])
 			}),
 			"d6:lengthi0e6:md5sum32:555555555555555555555555555555554:name13:cows and catse"
 		);
@@ -423,7 +429,7 @@ mod tests {
 					// one with a md5
 					File {
 						length: 2,
-						md5sum: Some(['2'; 32]),
+						md5sum: Some([b'2'; 32]),
 						path: vec!["one".to_owned(), "two".to_owned()],
 					},
 					// one without, and with no path
@@ -443,11 +449,11 @@ mod tests {
 		// single without md5sum
 		assert_eq!(
 			try_decode_from("d6:lengthi5e4:name9:cats.jpege"),
-			Ok(Ok((FileInfo::Single {
+			Ok(Ok(FileInfo::Single {
 				length: 5,
 				name: "cats.jpeg".to_owned(),
 				md5sum: None
-			})))
+			}))
 		);
 
 		// single with md5sum
@@ -455,20 +461,20 @@ mod tests {
 			try_decode_from(
 				"d6:lengthi0e6:md5sum32:555555555555555555555555555555554:name13:cows and catse"
 			),
-			Ok(Ok((FileInfo::Single {
+			Ok(Ok(FileInfo::Single {
 				length: 0,
 				name: "cows and cats".to_owned(),
-				md5sum: Some(['5'; 32])
-			})))
+				md5sum: Some([b'5'; 32])
+			}))
 		);
 
 		// minimal multi
 		assert_eq!(
 			try_decode_from("d5:filesle4:name2:mte"),
-			Ok(Ok((FileInfo::Multi {
+			Ok(Ok(FileInfo::Multi {
 				name: "mt".to_owned(),
 				files: vec![]
-			}))),
+			})),
 		);
 
 		// substantial multi
@@ -476,13 +482,13 @@ mod tests {
 			try_decode_from(
 				"d5:filesld6:lengthi2e6:md5sum32:222222222222222222222222222222224:pathl3:one3:twoeed6:lengthi4e4:pathleee4:name7:hulkinge"
 			),
-			Ok(Ok((FileInfo::Multi {
+			Ok(Ok(FileInfo::Multi {
 				name: "hulking".to_owned(),
 				files: vec![
 					// one with a md5
 					File {
 						length: 2,
-						md5sum: Some(['2'; 32]),
+						md5sum: Some([b'2'; 32]),
 						path: vec!["one".to_owned(), "two".to_owned()],
 					},
 					// one without, and with no path
@@ -492,7 +498,7 @@ mod tests {
 						path: vec![],
 					}
 				],
-			})))
+			}))
 		);
 
 		// wrong md5 length

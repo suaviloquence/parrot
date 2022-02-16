@@ -13,7 +13,7 @@ pub enum Data {
 	String(String),
 	List(Vec<Data>),
 	Dictionary(BTreeMap<String, Data>),
-	/// signifies end of list or dictionary, for internal use
+	#[doc(hidden)]
 	End,
 }
 
