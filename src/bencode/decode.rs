@@ -153,6 +153,13 @@ where
 	try_decode_from(&mut data.into_iter())
 }
 
+pub fn try_decode_from_str<T>(data: &'static str) -> Result<Result<T, T::Error>, DataParseError>
+where
+	T: TryFrom<Data>,
+{
+	try_decode_from_vec(Vec::from(data))
+}
+
 #[cfg(test)]
 mod tests {
 	use crate::bencode::*;
