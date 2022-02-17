@@ -17,12 +17,16 @@ impl Dictionary {
 		)
 	}
 
+	pub fn append(&mut self, other: &mut Self) {
+		self.0.append(&mut other.0)
+	}
+
 	pub fn insert(&mut self, key: Vec<u8>, value: Data) -> Option<Data> {
 		self.0.insert(key, value)
 	}
 
 	pub fn insert_str(&mut self, key: &str, value: Data) -> Option<Data> {
-		self.0.insert(key.as_bytes().to_vec(), value)
+		self.0.insert(key.into(), value)
 	}
 
 	pub fn remove(&mut self, key: &str) -> Option<Data> {
