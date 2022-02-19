@@ -22,11 +22,12 @@ fn handle_connection(
 ) -> std::io::Result<()> {
 	let mut data = Vec::new();
 	{
-		let mut buf = [0; 1024];
+		const BUF_SIZE: usize = 1024;
+		let mut buf = [0; BUF_SIZE];
 
 		loop {
 			match stream.read(&mut buf) {
-				Ok(1024) => data.extend_from_slice(&buf[..]),
+				Ok(BUF_SIZE) => data.extend_from_slice(&buf[..]),
 				Ok(i) => {
 					data.extend_from_slice(&buf[..i]);
 					break;
