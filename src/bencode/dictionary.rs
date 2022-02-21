@@ -9,7 +9,7 @@ impl Dictionary {
 	pub fn new() -> Self {
 		Self(BTreeMap::new())
 	}
-	pub fn from(mut data: Vec<(&str, Data)>) -> Self {
+	pub fn from(data: Vec<(&str, Data)>) -> Self {
 		Self(
 			data.into_iter()
 				.map(|(k, v)| (k.as_bytes().to_vec(), v))

@@ -44,30 +44,30 @@ impl TryFrom<Vec<u8>> for TrackerEvent {
 #[derive(PartialEq, Debug)]
 pub struct TrackerRequest {
 	/// 20-byte sha1 hash of the value dict from MetaInfo
-	info_hash: [u8; 20],
+	pub info_hash: [u8; 20],
 	/// 20-byte string unique to the client
-	peer_id: [u8; 20],
+	pub peer_id: [u8; 20],
 	/// port client is listening on
-	port: u16,
+	pub port: u16,
 	/// conventionally amount of bytes uploaded (but not explicitly specified)
-	uploaded: u64,
+	pub uploaded: u64,
 	/// conventionally amount of bytes downloaded (but not explicitly specified)
-	downloaded: u64,
+	pub downloaded: u64,
 	/// number of bytes left to download
-	left: u64,
+	pub left: u64,
 	/// accepts peers in "Compact Mode"
 	/// TODO unimplemented
-	compact: Option<bool>,
+	pub compact: Option<bool>,
 	/// requests peer list without peer ids, lesser precedence than compact
-	no_peer_id: Option<bool>,
+	pub no_peer_id: Option<bool>,
 	/// if omitted, a normal request performed at regular intervals
-	event: Option<TrackerEvent>,
+	pub event: Option<TrackerEvent>,
 	/// optional canonical ip
-	ip: Option<Vec<u8>>,
+	pub ip: Option<Vec<u8>>,
 	/// number of peers being requested, default is conventionally 50
-	numwant: Option<u64>,
+	pub numwant: Option<u64>,
 	/// tracker id required if specified in a previous announce
-	trackerid: Option<Vec<u8>>,
+	pub trackerid: Option<Vec<u8>>,
 }
 
 macro_rules! parse {

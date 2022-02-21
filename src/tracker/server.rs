@@ -1,77 +1,85 @@
 use std::io::{Read, Write};
 use std::net::{SocketAddr, TcpListener};
 
+use super::TrackerRequest;
 use crate::bencode::{self, bytes, Data, Dictionary};
 
-use super::TrackerRequest;
-
-pub fn listen() -> std::io::Result<()> {
-	let listener = TcpListener::bind("0.0.0.0:3000")?;
-
-	for stream in listener.incoming() {
-		let mut stream = stream?;
-		handle_connection(stream.local_addr()?, stream.peer_addr()?, &mut stream)?;
-	}
-	Ok(())
+pub struct Server {
+	pub info_hash: [u8; 20],
+	pub expected_addr: SocketAddr,
 }
 
-fn handle_connection(
-	local: SocketAddr,
-	remote: SocketAddr,
-	mut stream: &mut (impl Read + Write),
-) -> std::io::Result<()> {
-	let mut data = Vec::new();
-	{
-		const BUF_SIZE: usize = 1024;
-		let mut buf = [0; BUF_SIZE];
+impl Server {
+	pub fn listen(&self) -> std::io::Result<()> {
+		let listener = TcpListener::bind("0.0.0.0:3000")?;
 
-		loop {
-			match stream.read(&mut buf) {
-				Ok(BUF_SIZE) => data.extend_from_slice(&buf[..]),
-				Ok(i) => {
-					data.extend_from_slice(&buf[..i]);
-					break;
-				}
-				Err(_) => break,
-			}
+		for stream in listener.incoming() {
+			let mut stream = stream?;
+			self.handle_connection(stream.peer_addr()?, &mut stream)?;
 		}
+		Ok(())
 	}
 
-	let data = String::from_utf8(data).expect("UTF-8 conversion error");
+	fn handle_connection(
+		&self,
+		remote: SocketAddr,
+		mut stream: &mut (impl Read + Write),
+	) -> std::io::Result<()> {
+		let mut data = Vec::new();
+		{
+			const BUF_SIZE: usize = 1024;
+			let mut buf = [0; BUF_SIZE];
 
-	let path = match data.strip_prefix("GET /announce?") {
-		Some(p) => p,
-		None => return write!(&mut stream, "HTTP/1.1 400 BAD REQUEST\r\n\r\n"),
-	};
+			loop {
+				match stream.read(&mut buf) {
+					Ok(BUF_SIZE) => data.extend_from_slice(&buf[..]),
+					Ok(i) => {
+						data.extend_from_slice(&buf[..i]);
+						break;
+					}
+					Err(_) => break,
+				}
+			}
+		}
 
-	let query_string = match dbg!(path.split_once(" ")) {
-		Some((x, _)) => x,
-		_ => return write!(&mut stream, "HTTP/1.1 400 BAD REQUEST\r\n\r\n"),
-	};
+		let data = String::from_utf8(data).expect("UTF-8 conversion error");
 
-	let tracker_request = match super::decode(query_string).map(|qs| TrackerRequest::try_from(qs)) {
-		Ok(Ok(t_r)) => dbg!(t_r),
-		_ => return write!(&mut stream, "HTTP/1.1 400 BAD REQUEST\r\n\r\n"),
-	};
+		let path = match data.strip_prefix("GET /announce?") {
+			Some(p) => p,
+			None => return write!(&mut stream, "HTTP/1.1 400 BAD REQUEST\r\n\r\n"),
+		};
 
-	dbg!((local, remote));
+		let query_string = match dbg!(path.split_once(" ")) {
+			Some((x, _)) => x,
+			_ => return write!(&mut stream, "HTTP/1.1 400 BAD REQUEST\r\n\r\n"),
+		};
 
-	let mut body = bencode::encode(Data::Dict(Dictionary::from(vec![(
-		"failure reason",
-		bytes!("Unimplemented!"),
-	)])));
+		let tracker_request =
+			match super::decode(query_string).map(|qs| TrackerRequest::try_from(qs)) {
+				Ok(Ok(t_r)) => dbg!(t_r),
+				_ => return write!(&mut stream, "HTTP/1.1 400 BAD REQUEST\r\n\r\n"),
+			};
 
-	let mut bytes = format!(
-		"HTTP/1.1 200 OK\r\nContent-Length: {}\r\nContent-Type: text/plain\r\n\r\n",
-		body.len()
-	)
-	.into_bytes();
+		dbg!(self.info_hash == tracker_request.info_hash);
+		dbg!(remote == self.expected_addr);
 
-	bytes.append(&mut body);
-	bytes.push(b'\r');
-	bytes.push(b'\n');
+		let mut body = bencode::encode(Data::Dict(Dictionary::from(vec![(
+			"failure reason",
+			bytes!("Unimplemented!"),
+		)])));
 
-	stream.write_all(&bytes)
+		let mut bytes = format!(
+			"HTTP/1.1 200 OK\r\nContent-Length: {}\r\nContent-Type: text/plain\r\n\r\n",
+			body.len()
+		)
+		.into_bytes();
+
+		bytes.append(&mut body);
+		bytes.push(b'\r');
+		bytes.push(b'\n');
+
+		stream.write_all(&bytes)
+	}
 }
 
 #[cfg(test)]
@@ -81,7 +89,7 @@ mod tests {
 		net::SocketAddr,
 	};
 
-	use crate::tracker::server::handle_connection;
+	use crate::tracker::server::Server;
 	struct MockStream {
 		read: Vec<u8>,
 		write: Vec<u8>,
@@ -118,22 +126,18 @@ mod tests {
 	}
 
 	macro_rules! stream {
-		($read: expr, $local: expr, $remote: expr) => {{
+		($server: expr, $read: expr, $remote: expr) => {{
 			let mut stream = MockStream::create($read.into());
 			(
-				handle_connection(
-					SocketAddr::V4($local.parse().unwrap()),
-					SocketAddr::V4($remote.parse().unwrap()),
-					&mut stream,
-				),
+				$server.handle_connection(SocketAddr::V4($remote.parse().unwrap()), &mut stream),
 				stream,
 			)
 		}};
 	}
 
 	macro_rules! stream_eq {
-		($read: expr, $local: expr, $remote: expr, $result: expr) => {
-			let (err, stream) = stream!($read, $local, $remote);
+		($server: expr, $read: expr, $remote: expr, $result: expr) => {
+			let (err, stream) = stream!($server, $read, $remote);
 			if let Err(err) = err {
 				dbg!(err);
 				panic!();
@@ -151,15 +155,18 @@ mod tests {
 	#[test]
 	fn test_handle_req() {
 		stream_eq!(
+			Server {
+				info_hash: [1; 20],
+				expected_addr: "192.168.7.160:51551".parse().unwrap()
+			},
 			"GET / HTTP/1.1\r\n\r\n",
-			"127.0.0.1:3000",
 			"192.168.7.160:51551",
 			"HTTP/1.1 400 BAD REQUEST\r\n\r\n"
 		);
 
 		stream_eq!(
+			Server { info_hash: [1; 20], expected_addr: "192.168.7.160:50000".parse().unwrap()},
 			"GET /announce?info_hash=12345678901234567890&peer_id=magicnumber123456789&port=25565&uploaded=4&downloaded=5&left=6 HTTP/1.1\r\n",
-			"127.0.0.1:3000",
 			"192.168.7.160:50000",
 			"HTTP/1.1 200 OK\r\nContent-Length: 36\r\nContent-Type: text/plain\r\n\r\nd14:failure reason14:Unimplemented!e\r\n"
 		);
