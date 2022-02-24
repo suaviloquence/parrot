@@ -1,4 +1,4 @@
-use std::{iter, process};
+use std::process;
 
 pub enum Protocol {
 	BITTORRENT,

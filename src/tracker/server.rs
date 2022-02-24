@@ -1,27 +1,40 @@
 use std::io::{Read, Write};
 use std::net::{SocketAddr, TcpListener};
+use std::sync::mpsc::Sender;
+use std::thread;
 
-use super::TrackerRequest;
-use crate::bencode::{self, bytes, Data, Dictionary};
+use super::{Peers, TrackerRequest, TrackerResponse};
+use crate::bencode;
+use crate::peer::{self, Peer};
 
 pub struct Server {
 	pub info_hash: [u8; 20],
-	pub expected_addr: SocketAddr,
+	pub sender: Sender<SocketAddr>,
 }
 
 impl Server {
 	pub fn listen(&self) -> std::io::Result<()> {
 		let listener = TcpListener::bind("0.0.0.0:3000")?;
 
+		let peer = Peer {
+			info_hash: self.info_hash.clone(),
+			peer_id: peer::peer_id(),
+			port: 16384,
+			sender: self.sender.clone(),
+		};
+
+		thread::spawn(move || peer.listen().unwrap());
+
 		for stream in listener.incoming() {
 			let mut stream = stream?;
-			self.handle_connection(stream.peer_addr()?, &mut stream)?;
+			self.handle_connection(stream.local_addr()?, stream.peer_addr()?, &mut stream)?;
 		}
 		Ok(())
 	}
 
 	fn handle_connection(
 		&self,
+		local: SocketAddr,
 		remote: SocketAddr,
 		mut stream: &mut (impl Read + Write),
 	) -> std::io::Result<()> {
@@ -49,24 +62,37 @@ impl Server {
 			None => return write!(&mut stream, "HTTP/1.1 400 BAD REQUEST\r\n\r\n"),
 		};
 
-		let query_string = match dbg!(path.split_once(" ")) {
+		let query_string = match path.split_once(" ") {
 			Some((x, _)) => x,
 			_ => return write!(&mut stream, "HTTP/1.1 400 BAD REQUEST\r\n\r\n"),
 		};
 
 		let tracker_request =
 			match super::decode(query_string).map(|qs| TrackerRequest::try_from(qs)) {
-				Ok(Ok(t_r)) => dbg!(t_r),
+				Ok(Ok(t_r)) => t_r,
 				_ => return write!(&mut stream, "HTTP/1.1 400 BAD REQUEST\r\n\r\n"),
 			};
 
-		dbg!(self.info_hash == tracker_request.info_hash);
-		dbg!(remote == self.expected_addr);
+		if self.info_hash != tracker_request.info_hash {
+			return Ok(());
+		}
 
-		let mut body = bencode::encode(Data::Dict(Dictionary::from(vec![(
-			"failure reason",
-			bytes!("Unimplemented!"),
-		)])));
+		self.sender
+			.send(remote)
+			.expect("Error sending message from server thread.");
+
+		let mut body = bencode::encode(TrackerResponse::Ok {
+			interval: 300,
+			min_interval: None,
+			tracker_id: None, // TODO
+			complete: 1,
+			incomplete: 0,
+			peers: Peers::Full(vec![super::Peer {
+				peer_id: peer::peer_id(),
+				ip: local.ip(),
+				port: 16384,
+			}]),
+		});
 
 		let mut bytes = format!(
 			"HTTP/1.1 200 OK\r\nContent-Length: {}\r\nContent-Type: text/plain\r\n\r\n",
@@ -84,91 +110,35 @@ impl Server {
 
 #[cfg(test)]
 mod tests {
-	use std::{
-		io::{Read, Write},
-		net::SocketAddr,
-	};
+	use std::sync::mpsc;
 
-	use crate::tracker::server::Server;
-	struct MockStream {
-		read: Vec<u8>,
-		write: Vec<u8>,
-	}
-
-	impl MockStream {
-		fn create(read: Vec<u8>) -> Self {
-			Self {
-				read: Vec::from(read),
-				write: Vec::new(),
-			}
-		}
-	}
-
-	impl Read for MockStream {
-		fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-			let size = buf.len().min(self.read.len());
-			let mut values: Vec<u8> = self.read.drain(..size).collect();
-			values.resize(buf.len(), 0);
-			buf.copy_from_slice(values.as_slice());
-			Ok(size)
-		}
-	}
-	impl Write for MockStream {
-		fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-			let size = buf.len();
-			self.write.extend_from_slice(buf);
-			Ok(size)
-		}
-
-		fn flush(&mut self) -> std::io::Result<()> {
-			Ok(())
-		}
-	}
-
-	macro_rules! stream {
-		($server: expr, $read: expr, $remote: expr) => {{
-			let mut stream = MockStream::create($read.into());
-			(
-				$server.handle_connection(SocketAddr::V4($remote.parse().unwrap()), &mut stream),
-				stream,
-			)
-		}};
-	}
-
-	macro_rules! stream_eq {
-		($server: expr, $read: expr, $remote: expr, $result: expr) => {
-			let (err, stream) = stream!($server, $read, $remote);
-			if let Err(err) = err {
-				dbg!(err);
-				panic!();
-			}
-			let eq = stream.write == Vec::from($result);
-			if !eq {
-				assert_eq!(
-					String::from_utf8_lossy(stream.write.as_slice()),
-					String::from_utf8_lossy(Vec::from($result).as_slice())
-				)
-			}
-		};
-	}
+	use super::Server;
+	use crate::{peer, test::assert_stream_eq};
 
 	#[test]
 	fn test_handle_req() {
-		stream_eq!(
+		let (sx, rx) = mpsc::channel();
+		assert_stream_eq!(
 			Server {
 				info_hash: [1; 20],
-				expected_addr: "192.168.7.160:51551".parse().unwrap()
+				sender: sx.clone()
 			},
 			"GET / HTTP/1.1\r\n\r\n",
+			"127.0.0.1:3000",
 			"192.168.7.160:51551",
 			"HTTP/1.1 400 BAD REQUEST\r\n\r\n"
 		);
 
-		stream_eq!(
-			Server { info_hash: [1; 20], expected_addr: "192.168.7.160:50000".parse().unwrap()},
-			"GET /announce?info_hash=12345678901234567890&peer_id=magicnumber123456789&port=25565&uploaded=4&downloaded=5&left=6 HTTP/1.1\r\n",
+		rx.try_recv().expect_err("Unexpected IP in server.");
+
+		assert_stream_eq!(
+			Server { info_hash: [b'1'; 20], sender: sx.clone() },
+			"GET /announce?info_hash=11111111111111111111&peer_id=magicnumber123456789&port=25565&uploaded=4&downloaded=5&left=6 HTTP/1.1\r\n",
+			"127.0.0.1:3000",
 			"192.168.7.160:50000",
-			"HTTP/1.1 200 OK\r\nContent-Length: 36\r\nContent-Type: text/plain\r\n\r\nd14:failure reason14:Unimplemented!e\r\n"
+			format!("HTTP/1.1 200 OK\r\nContent-Length: 112\r\nContent-Type: text/plain\r\n\r\nd8:completei1e10:incompletei0e8:intervali300e5:peersld2:ip4:\x7f\x00\x00\x017:peer id20:{}4:porti16384eeee\r\n", String::from_utf8(peer::peer_id().to_vec()).unwrap())
 		);
+
+		assert_eq!(rx.try_recv(), Ok("192.168.7.160:50000".parse().unwrap()));
 	}
 }
