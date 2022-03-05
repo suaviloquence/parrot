@@ -90,7 +90,7 @@ impl Handler for Server {
 				peers: Peers::Full(vec![super::Peer {
 					peer_id: peer::peer_id(),
 					ip: local.ip(),
-					port: 16384,
+					port: self.config.peer_port,
 				}]),
 				warning_message: Some(format!("Your IP is {}", remote.ip())),
 			})

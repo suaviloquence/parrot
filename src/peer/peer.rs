@@ -46,6 +46,14 @@ impl Handler for Peer {
 		let mut info_hash = [0; 20];
 		stream.read_exact(&mut info_hash)?;
 
+		if info_hash != self.config.info_hash {
+			println!(
+				"Dropped peer with unwanted info hash ({:#?}): {:?}",
+				info_hash, remote
+			);
+			return Ok(());
+		}
+
 		let mut peer_id = [0; 20];
 		stream.read_exact(&mut peer_id)?;
 

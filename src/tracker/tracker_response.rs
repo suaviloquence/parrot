@@ -8,19 +8,19 @@ pub struct Peer {
 	pub port: u16,
 }
 
-impl Into<Data> for Peer {
-	fn into(self) -> Data {
+impl Into<Dictionary> for Peer {
+	fn into(self) -> Dictionary {
 		let mut dict = Dictionary::new();
-		dict.insert_str("peer id", Data::Bytes(self.peer_id.to_vec()));
-		dict.insert_str(
+		dict.insert("peer id", self.peer_id);
+		dict.insert(
 			"ip",
-			Data::Bytes(match self.ip {
-				IpAddr::V4(v4) => v4.octets().to_vec(),
-				IpAddr::V6(v6) => v6.octets().to_vec(),
-			}),
+			match self.ip {
+				IpAddr::V4(v4) => Vec::from(v4.octets()),
+				IpAddr::V6(v6) => Vec::from(v6.octets()),
+			},
 		);
-		dict.insert_str("port", Data::UInt(self.port as u64));
-		Data::Dict(dict)
+		dict.insert("port", Data::UInt(self.port as u64));
+		dict
 	}
 }
 
@@ -33,11 +33,8 @@ pub enum Peers {
 impl Into<Data> for Peers {
 	fn into(self) -> Data {
 		Data::List(match self {
-			Self::Full(peers) => peers.into_iter().map(Peer::into).collect(),
-			Self::Compact(bytes) => bytes
-				.into_iter()
-				.map(|arr| Data::Bytes(arr.to_vec()))
-				.collect(),
+			Self::Full(peers) => peers.into_iter().map(Data::from).collect(),
+			Self::Compact(bytes) => bytes.into_iter().map(Data::from).collect(),
 		})
 	}
 }
@@ -55,8 +52,8 @@ pub enum TrackerResponse {
 	Err(&'static str),
 }
 
-impl Into<Data> for TrackerResponse {
-	fn into(self) -> Data {
+impl Into<Dictionary> for TrackerResponse {
+	fn into(self) -> Dictionary {
 		match self {
 			Self::Ok {
 				interval,
@@ -69,31 +66,21 @@ impl Into<Data> for TrackerResponse {
 			} => {
 				let mut dict = Dictionary::new();
 
-				dict.insert_str("interval", Data::UInt(interval));
+				dict.insert("interval", interval);
 
-				if let Some(min_interval) = min_interval {
-					dict.insert_str("min interval", Data::UInt(min_interval));
-				}
+				dict.insert_some("min interval", min_interval);
 
-				if let Some(tracker_id) = tracker_id {
-					dict.insert_str("tracker id", Data::Bytes(tracker_id.into_bytes()));
-				}
+				dict.insert_some("tracker id", tracker_id);
 
-				dict.insert_str("complete", Data::UInt(complete));
-				dict.insert_str("incomplete", Data::UInt(incomplete));
+				dict.insert("complete", complete);
+				dict.insert("incomplete", incomplete);
 
-				dict.insert_str("peers", peers.into());
+				dict.insert("peers", peers);
 
-				if let Some(warning_message) = warning_message {
-					dict.insert_str("warning message", Data::Bytes(warning_message.into_bytes()));
-				}
-
-				Data::Dict(dict)
+				dict.insert_some("warning message", warning_message);
+				dict
 			}
-			Self::Err(s) => Data::Dict(Dictionary::from(vec![(
-				"failure reason",
-				Data::Bytes(s.into()),
-			)])),
+			Self::Err(s) => Dictionary::from(vec![("failure reason", s)]),
 		}
 	}
 }

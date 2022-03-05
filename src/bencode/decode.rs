@@ -10,7 +10,7 @@ fn to_dec_digit(byte: u8) -> Option<u8> {
 	}
 }
 
-pub fn decode(bytes: &mut impl Iterator<Item = u8>) -> Result<Data, DataParseError> {
+pub fn decode_iter(bytes: &mut impl Iterator<Item = u8>) -> Result<Data, DataParseError> {
 	let start = match bytes.next() {
 		Some(b) => b,
 		None => return Err(DataParseError("Empty string.")),
@@ -95,7 +95,7 @@ pub fn decode(bytes: &mut impl Iterator<Item = u8>) -> Result<Data, DataParseErr
 			let mut vec = Vec::new();
 
 			loop {
-				match decode(bytes) {
+				match decode_iter(bytes) {
 					Ok(Data::End) => break,
 					Ok(it) => vec.push(it),
 					Err(err) => return Err(err),
@@ -107,14 +107,14 @@ pub fn decode(bytes: &mut impl Iterator<Item = u8>) -> Result<Data, DataParseErr
 			let mut map = Dictionary::new();
 
 			loop {
-				let key = match decode(bytes) {
+				let key = match decode_iter(bytes) {
 					Ok(Data::End) => break,
 					Ok(Data::Bytes(k)) => k,
 					Ok(_) => return Err(DataParseError("Unexpected non-key type.")),
 					err => return err,
 				};
 
-				let value = match decode(bytes) {
+				let value = match decode_iter(bytes) {
 					Ok(Data::End) => return Err(DataParseError("Unexpected end of dictionary.")),
 					Ok(val) => val,
 					err => return err,
@@ -131,31 +131,14 @@ pub fn decode(bytes: &mut impl Iterator<Item = u8>) -> Result<Data, DataParseErr
 	}
 }
 
-pub fn try_decode_from<T>(
-	data: &mut impl Iterator<Item = u8>,
-) -> Result<Result<T, T::Error>, DataParseError>
-where
-	T: TryFrom<Data>,
-{
-	Ok(<T as TryFrom<Data>>::try_from(decode(data)?))
+pub fn decode(data: impl Into<Vec<u8>>) -> Result<Data, DataParseError> {
+	decode_iter(&mut data.into().into_iter())
 }
 
-pub fn decode_vec(data: Vec<u8>) -> Result<Data, DataParseError> {
-	decode(&mut data.into_iter())
-}
-
-pub fn try_decode_from_vec<T>(data: Vec<u8>) -> Result<Result<T, T::Error>, DataParseError>
-where
-	T: TryFrom<Data>,
-{
-	try_decode_from(&mut data.into_iter())
-}
-
-pub fn try_decode_from_str<T>(data: &'static str) -> Result<Result<T, T::Error>, DataParseError>
-where
-	T: TryFrom<Data>,
-{
-	try_decode_from_vec(Vec::from(data))
+pub fn try_decode_from<T: TryFrom<Data>, D: Into<Vec<u8>>>(
+	data: D,
+) -> Result<Result<T, T::Error>, DataParseError> {
+	Ok(decode(data)?.try_into())
 }
 
 #[cfg(test)]
@@ -164,97 +147,100 @@ mod tests {
 
 	#[test]
 	fn test_decode_int() {
-		assert_decode!("i3e", Data::Int(3));
-		assert_decode!("i3e", Data::UInt(3));
-		assert_decode!(format!("i{}e", u64::MAX).as_bytes(), Data::UInt(u64::MAX));
-		assert_decode!(format!("i{}e", i64::MAX).as_bytes(), Data::Int(i64::MAX));
-		assert_decode!(format!("i{}e", i64::MIN).as_bytes(), Data::Int(i64::MIN));
-		assert_decode!("i-3e", Data::Int(-3));
-		assert_decode!("i0e", Data::Int(0));
+		assert_decode("i3e", 3 as i64);
+		assert_decode("i3e", 3 as u64);
+		assert_decode(format!("i{}e", u64::MAX), u64::MAX);
+		assert_decode(format!("i{}e", i64::MAX), i64::MAX);
+		assert_decode(format!("i{}e", i64::MIN), i64::MIN);
+		assert_decode("i-3e", -3 as i64);
+		assert_decode("i0e", 0 as i64);
 
 		// empty
-		assert_decode_err!("ie");
+		assert_decode_err("ie");
 
 		// just a negative sign
-		assert_decode_err!("i-e");
+		assert_decode_err("i-e");
 
 		// negative sign in invalid place
-		assert_decode_err!("i1-e");
+		assert_decode_err("i1-e");
 	}
 
 	#[test]
 	fn test_decode_str() {
-		assert_decode!("4:four", bytes!("four"));
-		assert_decode!("0:", bytes!(""));
+		assert_decode("4:four", "four");
+		assert_decode("0:", "");
 
 		// not enough length
-		assert_decode_err!("4:123");
+		assert_decode_err("4:123");
 
 		// invalid length marker
-		assert_decode_err!("4x:1234");
+		assert_decode_err("4x:1234");
 	}
 	#[test]
 	fn test_decode_list() {
-		assert_decode!("l4:spam4:eggse", list!(bytes!("spam"), bytes!("eggs")));
-		assert_decode!("le", list!());
+		assert_decode("l4:spam4:eggse", vec!["spam", "eggs"]);
+		assert_decode("le", Vec::<Data>::new());
 
 		// no ending
-		assert_decode_err!("lle");
+		assert_decode_err("lle");
 
 		// skip over end markers in string
-		assert_decode_err!("l4:eeee");
+		assert_decode_err("l4:eeee");
 
 		// invalid inner data
-		assert_decode_err!("l0:a0:e");
+		assert_decode_err("l0:a0:e");
 	}
 
 	#[test]
 	fn test_decode_dict() {
-		assert_decode!(
+		assert_decode(
 			"d3:cow3:moo4:spam4:eggse",
-			dict!(("cow", bytes!("moo")), ("spam", bytes!("eggs")))
+			Dictionary::from(vec![("cow", "moo"), ("spam", "eggs")]),
 		);
 
-		assert_decode!(
+		assert_decode(
 			"d4:spaml1:a1:bee",
-			dict!(("spam", list!(bytes!("a"), bytes!("b"))))
+			Dictionary::from(vec![("spam", vec!["a", "b"])]),
 		);
 
-		assert_decode!(
+		assert_decode(
 			"d9:publisher3:bob17:publisher-webpage15:www.example.com18:publisher.location4:homee",
-			dict!(
-				("publisher", bytes!("bob")),
-				("publisher-webpage", bytes!("www.example.com")),
-				("publisher.location", bytes!("home"))
-			)
+			Dictionary::from(vec![
+				("publisher", "bob"),
+				("publisher-webpage", "www.example.com"),
+				("publisher.location", "home"),
+			]),
 		);
 
-		assert_decode!("de", dict!());
+		assert_decode("de", Dictionary::new());
 
 		// no ending
-		assert_decode_err!("dde");
+		assert_decode_err("dde");
 
 		// duplicate keys
-		assert_decode_err!("d1:a3:dup1:a3:nooe");
+		assert_decode_err("d1:a3:dup1:a3:nooe");
 
 		// non-string as key
-		assert_decode_err!("di2e3:vale");
+		assert_decode_err("di2e3:vale");
 
 		// invalid inner data
-		assert_decode_err!("d0:a0:e");
+		assert_decode_err("d0:a0:e");
 	}
 }
-macro_rules! assert_decode {
-	($str: expr, $data: expr) => {
-		assert_eq!(decode_vec(Vec::from($str)), Ok($data))
-	};
+
+#[cfg(test)]
+pub fn assert_decode(encoded: impl Into<Vec<u8>>, decoded: impl Into<Data>) {
+	assert_eq!(decode(encoded.into()), Ok(decoded.into()))
 }
 
-macro_rules! assert_decode_err {
-	($str: expr) => {
-		assert!(decode_vec(Vec::from($str)).is_err())
-	};
+#[cfg(test)]
+pub fn assert_decode_err(encoded: impl Into<Vec<u8>>) {
+	let vec = encoded.into();
+	if let Ok(ok) = decode(vec.clone()) {
+		panic!(
+			"Encoding from {:?} is not an error: {:?}",
+			String::from_utf8_lossy(&vec),
+			ok
+		);
+	}
 }
-
-pub(crate) use assert_decode;
-pub(crate) use assert_decode_err;

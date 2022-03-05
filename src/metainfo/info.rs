@@ -1,4 +1,4 @@
-use crate::bencode::{Data, Dictionary};
+use crate::bencode::{impl_try_from_data, Data, Dictionary};
 
 use super::FileInfo;
 
@@ -10,53 +10,47 @@ pub struct Info {
 	pub file_info: FileInfo,
 }
 
-impl Into<Data> for Info {
-	fn into(self) -> Data {
+impl Into<Dictionary> for Info {
+	fn into(self) -> Dictionary {
 		let mut dict = Dictionary::new();
-		dict.insert_str("piece length", Data::UInt(self.piece_length));
-		dict.insert_str("pieces", Data::Bytes(self.pieces));
-		if let Some(private) = self.private {
-			dict.insert_str("private", Data::UInt(private as u64));
-		}
-		if let Data::Dict(mut file_data) = self.file_info.into() {
-			dict.append(&mut file_data);
-		}
-		Data::Dict(dict)
+		dict.insert("piece length", self.piece_length);
+		dict.insert("pieces", self.pieces);
+		dict.insert_some("private", self.private.map(|s| s as u64));
+		dict.append(&mut self.file_info.into());
+		dict
 	}
 }
 
-impl TryFrom<Data> for Info {
+impl TryFrom<Dictionary> for Info {
 	type Error = ();
 
-	fn try_from(value: Data) -> Result<Self, Self::Error> {
-		if let Data::Dict(mut data) = value {
-			let piece_length = match data.remove("piece length") {
-				Some(Data::UInt(u)) => u,
-				_ => return Err(()),
-			};
-			let pieces = match data.remove("pieces") {
-				Some(Data::Bytes(b)) => b,
-				_ => return Err(()),
-			};
-			let private = match data.remove("private") {
-				Some(Data::UInt(u)) => Some(u != 0),
-				Some(_) => return Err(()),
-				None => None,
-			};
+	fn try_from(mut data: Dictionary) -> Result<Self, Self::Error> {
+		let piece_length = match data.remove("piece length") {
+			Some(Data::UInt(u)) => u,
+			_ => return Err(()),
+		};
+		let pieces = match data.remove("pieces") {
+			Some(Data::Bytes(b)) => b,
+			_ => return Err(()),
+		};
+		let private = match data.remove("private") {
+			Some(Data::UInt(u)) => Some(u != 0),
+			Some(_) => return Err(()),
+			None => None,
+		};
 
-			let file_info = FileInfo::try_from(Data::Dict(data))?;
+		let file_info = FileInfo::try_from(Data::Dict(data))?;
 
-			Ok(Self {
-				piece_length,
-				pieces,
-				private,
-				file_info,
-			})
-		} else {
-			Err(())
-		}
+		Ok(Self {
+			piece_length,
+			pieces,
+			private,
+			file_info,
+		})
 	}
 }
+
+impl_try_from_data!(Info);
 
 #[cfg(test)]
 mod tests {
@@ -103,7 +97,7 @@ mod tests {
 	#[test]
 	fn test_info_from() {
 		assert_eq!(
-			try_decode_from_str("d6:lengthi0e4:name0:12:piece lengthi0e6:pieces0:e"),
+			try_decode_from("d6:lengthi0e4:name0:12:piece lengthi0e6:pieces0:e"),
 			Ok(Ok(Info {
 				piece_length: 0,
 				pieces: "".into(),
@@ -117,7 +111,7 @@ mod tests {
 		);
 
 		assert_eq!(
-			try_decode_from_str(
+			try_decode_from(
 				"d5:filesld6:lengthi0e4:pathl4:sbin4:suid7:exploiteee4:name4:zamn12:piece lengthi20e6:pieces20:123456789012345678907:privatei1ee"
 			),
 			Ok(Ok(Info {

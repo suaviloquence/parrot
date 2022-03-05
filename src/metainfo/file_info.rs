@@ -1,4 +1,4 @@
-use crate::bencode::{Data, Dictionary};
+use crate::bencode::{impl_try_from_data, Data, Dictionary};
 
 use super::File;
 
@@ -15,8 +15,8 @@ pub enum FileInfo {
 	},
 }
 
-impl Into<Data> for FileInfo {
-	fn into(self) -> Data {
+impl Into<Dictionary> for FileInfo {
+	fn into(self) -> Dictionary {
 		let mut dict = Dictionary::new();
 		match self {
 			Self::Single {
@@ -24,65 +24,58 @@ impl Into<Data> for FileInfo {
 				md5sum,
 				name,
 			} => {
-				dict.insert_str("length", Data::UInt(length));
-				if let Some(md5sum) = md5sum {
-					dict.insert_str("md5sum", Data::Bytes(Vec::from(md5sum)));
-				}
-				dict.insert_str("name", Data::Bytes(name));
+				dict.insert("length", length);
+				dict.insert_some("md5sum", md5sum);
+				dict.insert("name", name);
 			}
 			Self::Multi { name, files } => {
-				dict.insert_str("name", Data::Bytes(name));
-				dict.insert_str(
-					"files",
-					Data::List(files.into_iter().map(|f| f.into()).collect()),
-				);
+				dict.insert("name", name);
+				dict.insert("files", files);
 			}
 		};
-		Data::Dict(dict)
+		dict
 	}
 }
 
-impl TryFrom<Data> for FileInfo {
+impl TryFrom<Dictionary> for FileInfo {
 	type Error = ();
 
-	fn try_from(value: Data) -> Result<Self, Self::Error> {
-		if let Data::Dict(mut data) = value {
-			let name = match data.remove("name") {
-				Some(Data::Bytes(b)) => b,
+	fn try_from(mut data: Dictionary) -> Result<Self, Self::Error> {
+		let name = match data.remove("name") {
+			Some(Data::Bytes(b)) => b,
+			_ => return Err(()),
+		};
+
+		if let Some(Data::List(l)) = data.remove("files") {
+			let mut files = Vec::new();
+
+			for file in l {
+				files.push(File::try_from(file)?);
+			}
+
+			Ok(Self::Multi { name, files })
+		} else {
+			let length = match data.remove("length") {
+				Some(Data::UInt(u)) => u,
 				_ => return Err(()),
 			};
 
-			if let Some(Data::List(l)) = data.remove("files") {
-				let mut files = Vec::new();
+			let md5sum = match data.remove("md5sum") {
+				Some(Data::Bytes(b)) => b.try_into().map(|c| Some(c)).map_err(|_| ())?,
+				None => None,
+				_ => return Err(()),
+			};
 
-				for file in l {
-					files.push(File::try_from(file)?);
-				}
-
-				Ok(Self::Multi { name, files })
-			} else {
-				let length = match data.remove("length") {
-					Some(Data::UInt(u)) => u,
-					_ => return Err(()),
-				};
-
-				let md5sum = match data.remove("md5sum") {
-					Some(Data::Bytes(b)) => b.try_into().map(|c| Some(c)).map_err(|_| ())?,
-					None => None,
-					_ => return Err(()),
-				};
-
-				Ok(Self::Single {
-					name,
-					length,
-					md5sum,
-				})
-			}
-		} else {
-			Err(())
+			Ok(Self::Single {
+				name,
+				length,
+				md5sum,
+			})
 		}
 	}
 }
+
+impl_try_from_data!(FileInfo);
 
 #[cfg(test)]
 mod tests {
@@ -147,7 +140,7 @@ mod tests {
 	fn test_fileinfo_from() {
 		// single without md5sum
 		assert_eq!(
-			try_decode_from_str("d6:lengthi5e4:name9:cats.jpege"),
+			try_decode_from("d6:lengthi5e4:name9:cats.jpege"),
 			Ok(Ok(FileInfo::Single {
 				length: 5,
 				name: "cats.jpeg".into(),
@@ -157,7 +150,7 @@ mod tests {
 
 		// single with md5sum
 		assert_eq!(
-			try_decode_from_str(
+			try_decode_from(
 				"d6:lengthi0e6:md5sum32:555555555555555555555555555555554:name13:cows and catse"
 			),
 			Ok(Ok(FileInfo::Single {
@@ -169,7 +162,7 @@ mod tests {
 
 		// minimal multi
 		assert_eq!(
-			try_decode_from_str("d5:filesle4:name2:mte"),
+			try_decode_from("d5:filesle4:name2:mte"),
 			Ok(Ok(FileInfo::Multi {
 				name: "mt".into(),
 				files: vec![]
@@ -178,7 +171,7 @@ mod tests {
 
 		// substantial multi
 		assert_eq!(
-			try_decode_from_str(
+			try_decode_from(
 				"d5:filesld6:lengthi2e6:md5sum32:222222222222222222222222222222224:pathl3:one3:twoeed6:lengthi4e4:pathleee4:name7:hulkinge"
 			),
 			Ok(Ok(FileInfo::Multi {
@@ -202,7 +195,7 @@ mod tests {
 
 		// wrong md5 length
 		assert!(
-			try_decode_from_str::<FileInfo>("d6:lengthi0e6:md5sum0:4:name0:e")
+			try_decode_from::<FileInfo, _>("d6:lengthi0e6:md5sum0:4:name0:e")
 				.unwrap()
 				.is_err()
 		);
@@ -210,7 +203,7 @@ mod tests {
 		// bad files
 		assert!(
 			// length is string
-			try_decode_from_str::<FileInfo>("d5:filesld6:length0:4:pathlee4:name8:bad pathee")
+			try_decode_from::<FileInfo, _>("d5:filesld6:length0:4:pathlee4:name8:bad pathee")
 				.unwrap()
 				.is_err()
 		)

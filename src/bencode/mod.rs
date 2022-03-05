@@ -1,10 +1,10 @@
-#[macro_use]
 mod data;
 mod decode;
 mod dictionary;
 mod encode;
 
-pub use data::*;
+pub(crate) use data::impl_try_from_data;
+pub use data::Data;
 pub use decode::*;
 pub use dictionary::Dictionary;
 pub use encode::encode;

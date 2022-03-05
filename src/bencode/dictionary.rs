@@ -9,10 +9,10 @@ impl Dictionary {
 	pub fn new() -> Self {
 		Self(BTreeMap::new())
 	}
-	pub fn from(data: Vec<(&str, Data)>) -> Self {
+	pub fn from(data: Vec<(&str, impl Into<Data>)>) -> Self {
 		Self(
 			data.into_iter()
-				.map(|(k, v)| (k.as_bytes().to_vec(), v))
+				.map(|(k, v)| (k.into(), v.into()))
 				.collect(),
 		)
 	}
@@ -21,12 +21,20 @@ impl Dictionary {
 		self.0.append(&mut other.0)
 	}
 
-	pub fn insert(&mut self, key: Vec<u8>, value: Data) -> Option<Data> {
-		self.0.insert(key, value)
+	pub fn insert(&mut self, key: impl Into<Vec<u8>>, value: impl Into<Data>) -> Option<Data> {
+		self.0.insert(key.into(), value.into())
 	}
 
-	pub fn insert_str(&mut self, key: &str, value: Data) -> Option<Data> {
-		self.0.insert(key.into(), value)
+	pub fn insert_some(
+		&mut self,
+		key: impl Into<Vec<u8>>,
+		value: Option<impl Into<Data>>,
+	) -> Option<Data> {
+		if let Some(data) = value {
+			self.insert(key, data)
+		} else {
+			None
+		}
 	}
 
 	pub fn remove(&mut self, key: &str) -> Option<Data> {

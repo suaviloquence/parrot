@@ -35,36 +35,83 @@ impl PartialEq for Data {
 	}
 }
 
-macro_rules! bytes {
-	($str: expr) => {
-		crate::bencode::Data::Bytes(Vec::from($str))
+impl From<Vec<u8>> for Data {
+	fn from(d: Vec<u8>) -> Self {
+		Data::Bytes(d)
+	}
+}
+
+macro_rules! impl_from_u8arr {
+	($($N: expr)+) => {
+		$(
+			impl From<[u8; $N]> for Data {
+				fn from(data: [u8; $N]) -> Self {
+					Data::Bytes(Vec::from(data))
+				}
+			}
+		)+
 	};
 }
 
-macro_rules! list {
-		($($item: expr),*) => {
-			{
-				#[allow(unused_mut)]
-				let mut vec = Vec::new();
-				$(
-					vec.push($item);
-				)*
-					crate::bencode::Data::List(vec)
+// 6: compacts. 20: peer id, anything with sha1 (e.g. info hash), 32: md5sum
+impl_from_u8arr!(6 20 32);
+
+impl From<&[u8]> for Data {
+	fn from(data: &[u8]) -> Self {
+		Data::Bytes(data.into())
+	}
+}
+
+impl From<String> for Data {
+	fn from(d: String) -> Self {
+		Data::Bytes(d.into_bytes())
+	}
+}
+
+impl From<&str> for Data {
+	fn from(s: &str) -> Self {
+		Data::Bytes(s.into())
+	}
+}
+
+impl<T: Into<Data>> From<Vec<T>> for Data {
+	fn from(d: Vec<T>) -> Self {
+		Data::List(d.into_iter().map(|x| x.into()).collect())
+	}
+}
+
+impl From<u64> for Data {
+	fn from(u: u64) -> Self {
+		Data::UInt(u)
+	}
+}
+
+impl From<i64> for Data {
+	fn from(i: i64) -> Self {
+		Data::Int(i)
+	}
+}
+
+impl<T: Into<Dictionary>> From<T> for Data {
+	fn from(d: T) -> Self {
+		Data::Dict(d.into())
+	}
+}
+
+macro_rules! impl_try_from_data {
+	($T: ident) => {
+		impl TryFrom<Data> for $T {
+			type Error = ();
+
+			fn try_from(data: Data) -> Result<Self, Self::Error> {
+				if let Data::Dict(dict) = data {
+					Self::try_from(dict)
+				} else {
+					Err(())
+				}
 			}
-		};
-	}
+		}
+	};
+}
 
-macro_rules! dict {
-		($(($key: expr, $val: expr)),*) => {{
-			#[allow(unused_mut)]
-			let mut dict = crate::bencode::Dictionary::new();
-			$(
-				dict.insert(Vec::from($key), $val);
-			)*
-			crate::bencode::Data::Dict(dict)
-		}};
-	}
-
-pub(crate) use bytes;
-pub(crate) use dict;
-pub(crate) use list;
+pub(crate) use impl_try_from_data;

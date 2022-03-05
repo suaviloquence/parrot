@@ -11,9 +11,13 @@ use metainfo::MetaInfo;
 use sha1_smol::Sha1;
 use tracker::Server;
 
-use crate::metainfo::{FileInfo, Info};
+use crate::{
+	bytes::BytesExt,
+	metainfo::{FileInfo, Info},
+};
 
 mod bencode;
+mod bytes;
 mod config;
 mod metainfo;
 mod peer;
@@ -94,15 +98,7 @@ fn main() {
 	let mut config = Config::load_or_exit();
 	if config.file.is_some() {
 		config.info_hash = generate_torrent(&config).expect("Error generating torrent.");
-		println!(
-			"Info Hash: {}",
-			config
-				.info_hash
-				.iter()
-				.map(|x| format!("{:x}", x))
-				.collect::<Vec<_>>()
-				.concat()
-		)
+		println!("Info Hash: {}", config.info_hash.to_hex_string())
 	}
 	let (sender, reciever) = mpsc::channel();
 
