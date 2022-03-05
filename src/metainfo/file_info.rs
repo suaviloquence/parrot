@@ -2,7 +2,7 @@ use crate::bencode::{Data, Dictionary};
 
 use super::File;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum FileInfo {
 	Single {
 		length: u64,

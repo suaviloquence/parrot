@@ -1,7 +1,7 @@
 use super::Info;
 use crate::bencode::{Data, Dictionary};
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Clone)]
 pub struct MetaInfo {
 	pub info: Info,
 	pub announce: Vec<u8>,

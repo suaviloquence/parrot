@@ -2,7 +2,7 @@ use crate::bencode::{Data, Dictionary};
 
 use super::FileInfo;
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Clone)]
 pub struct Info {
 	pub piece_length: u64,
 	pub pieces: Vec<u8>,

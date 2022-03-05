@@ -1,6 +1,6 @@
 use crate::bencode::{Data, Dictionary};
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct File {
 	pub length: u64,
 	pub md5sum: Option<[u8; 32]>,

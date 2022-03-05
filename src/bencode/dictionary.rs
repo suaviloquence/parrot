@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use super::Data;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Dictionary(BTreeMap<Vec<u8>, Data>);
 
 impl Dictionary {

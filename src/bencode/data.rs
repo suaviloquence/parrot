@@ -1,6 +1,6 @@
 use super::Dictionary;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Data {
 	/// unsigned integer type.  will always be decoded before i64
 	UInt(u64),
