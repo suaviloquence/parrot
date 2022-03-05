@@ -4,32 +4,36 @@ use std::{
 	sync::mpsc::Sender,
 };
 
+use crate::{config::Config, Handler};
+
 use super::{Handshake, Protocol};
 
 pub struct Peer {
-	pub info_hash: [u8; 20],
+	pub config: Config,
 	pub peer_id: [u8; 20],
-	pub port: u16,
 	pub sender: Sender<SocketAddr>,
 }
 
 impl Peer {
 	pub fn listen(&self) -> std::io::Result<()> {
-		let listener = TcpListener::bind(SocketAddr::from(([0, 0, 0, 0], self.port)))?;
+		let listener = TcpListener::bind(SocketAddr::from(([0, 0, 0, 0], self.config.peer_port)))?;
 
 		for stream in listener.incoming() {
-			let stream = stream?;
+			let stream = dbg!(stream)?;
 			self.handle_connection(stream.local_addr()?, stream.peer_addr()?, stream)?;
 		}
 		Ok(())
 	}
+}
 
+impl Handler for Peer {
 	fn handle_connection(
 		&self,
-		local: SocketAddr,
+		_: SocketAddr,
 		remote: SocketAddr,
 		mut stream: impl Read + Write,
 	) -> std::io::Result<()> {
+		println!("{:?}", remote);
 		let mut plen = [0; 1];
 		stream.read_exact(&mut plen)?;
 
@@ -50,9 +54,11 @@ impl Peer {
 			protocol, reserved, info_hash, peer_id
 		);
 
-		if info_hash != self.info_hash {
+		if info_hash != self.config.info_hash {
 			return Ok(());
 		}
+
+		println!("Peer: {:?}", remote);
 
 		self.sender
 			.send(remote)
@@ -74,17 +80,19 @@ mod tests {
 	use std::sync::mpsc;
 
 	use super::Peer;
-	use crate::test::assert_stream_eq;
+	use crate::{config::test_config, test::assert_stream_eq};
 
 	#[test]
 	fn test_handle_connection() {
 		let (sx, rx) = mpsc::channel();
-		assert_stream_eq!(
+		let mut config = test_config();
+		config.info_hash = [1; 20];
+		config.peer_port = 25565;
+		assert_stream_eq(
 			Peer {
 				peer_id: [3; 20],
-				port: 25565,
+				config,
 				sender: sx.clone(),
-				info_hash: [1; 20],
 			},
 			"\x13BitTorrent protocol\x00\x00\x00\x00\x00\x00\x00\x00\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x02\x02\x02\x02\x02\x02\x02\x02\x02\x02\x02\x02\x02\x02\x02\x02\x02\x02\x02\x02",
 			"127.0.0.1:16384",

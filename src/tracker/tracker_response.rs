@@ -50,6 +50,7 @@ pub enum TrackerResponse {
 		complete: u64,
 		incomplete: u64,
 		peers: Peers,
+		warning_message: Option<String>,
 	},
 	Err(&'static str),
 }
@@ -64,6 +65,7 @@ impl Into<Data> for TrackerResponse {
 				complete,
 				incomplete,
 				peers,
+				warning_message,
 			} => {
 				let mut dict = Dictionary::new();
 
@@ -82,9 +84,16 @@ impl Into<Data> for TrackerResponse {
 
 				dict.insert_str("peers", peers.into());
 
+				if let Some(warning_message) = warning_message {
+					dict.insert_str("warning message", Data::Bytes(warning_message.into_bytes()));
+				}
+
 				Data::Dict(dict)
 			}
-			Self::Err(s) => Data::Bytes(s.into()),
+			Self::Err(s) => Data::Dict(Dictionary::from(vec![(
+				"failure reason",
+				Data::Bytes(s.into()),
+			)])),
 		}
 	}
 }

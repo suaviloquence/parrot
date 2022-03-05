@@ -1,6 +1,6 @@
 use super::Data;
 
-pub fn encode<T: Into<Data>>(data: T) -> Vec<u8> {
+pub fn encode(data: impl Into<Data>) -> Vec<u8> {
 	let data = data.into();
 	match data {
 		Data::Bytes(mut s) => {

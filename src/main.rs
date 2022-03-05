@@ -1,67 +1,126 @@
-use std::{fs, sync::mpsc, thread};
+use std::{
+	fs::{self, File},
+	io::{self, Read, Write},
+	net::SocketAddr,
+	sync::mpsc,
+	thread,
+};
 
+use config::Config;
 use metainfo::MetaInfo;
-use peer::Peer;
+use sha1_smol::Sha1;
+use tracker::Server;
+
+use crate::metainfo::{FileInfo, Info};
 
 mod bencode;
+mod config;
 mod metainfo;
 mod peer;
 mod test;
 mod tracker;
 
-fn generate_torrent() {
-	let sha1sum =
-		b"\xdb\x52\x4f\x06\x65\xf0\xa6\x39\x8b\x7e\xf0\x5d\xae\xec\xa5\x2c\x38\x2e\x16\x75";
+pub trait Handler {
+	fn handle_connection(
+		&self,
+		local: SocketAddr,
+		remote: SocketAddr,
+		stream: impl Read + Write,
+	) -> io::Result<()>;
+}
+
+fn generate_torrent(config: &Config) -> io::Result<[u8; 20]> {
+	const PIECE_LENGTH: usize = 16384;
+
+	let path = match &config.file {
+		Some(p) => p,
+		None => return Err(io::Error::new(io::ErrorKind::NotFound, "No file in config")),
+	};
+
+	let mut file = File::open(path)?;
+
+	let mut length = 0;
+	let mut pieces = Vec::new();
+
+	loop {
+		let mut piece = [0; PIECE_LENGTH];
+		let len = file.read(&mut piece)?;
+		if len == 0 {
+			break;
+		}
+		length += len as u64;
+		pieces.extend_from_slice(&Sha1::from(&piece[..len]).digest().bytes());
+		if len < PIECE_LENGTH {
+			break;
+		}
+	}
+
+	let info = Info {
+		piece_length: PIECE_LENGTH as u64,
+		pieces,
+		private: Some(true),
+		file_info: FileInfo::Single {
+			name: path
+				.file_name()
+				.ok_or(io::Error::new(
+					io::ErrorKind::InvalidInput,
+					"Path has no file name",
+				))?
+				.to_string_lossy()
+				.bytes()
+				.collect(),
+			length,
+			md5sum: None,
+		},
+	};
+
+	let info_hash = Sha1::from(bencode::encode(info.clone())).digest().bytes();
+
 	let meta_info = MetaInfo {
-		announce: "http://127.0.0.1:3000/announce".into(),
+		announce: format!("http://{}:{}/announce", config.host, config.server_port).into_bytes(),
 		announce_list: None,
 		comment: None,
 		created_by: None,
 		creation_date: None,
 		encoding: None,
-		info: metainfo::Info {
-			piece_length: 16384,
-			pieces: sha1sum.to_vec(),
-			private: Some(true),
-			file_info: metainfo::FileInfo::Single {
-				name: "file.txt".into(),
-				length: 19,
-				md5sum: None,
-			},
-		},
+		info: info.clone(),
 	};
 
-	let info = metainfo::Info {
-		piece_length: 16384,
-		pieces: sha1sum.to_vec(),
-		private: Some(true),
-		file_info: metainfo::FileInfo::Single {
-			name: "file.txt".into(),
-			length: 19,
-			md5sum: None,
-		},
-	};
-
-	fs::write("file.torrent", bencode::encode(meta_info)).expect("Error writing to file: ");
-	fs::write("file.torrent.info", bencode::encode(info)).expect("Error writing to info file: ");
+	fs::write("file.torrent", bencode::encode(meta_info))?;
+	Ok(info_hash)
 }
 
 fn main() {
-	generate_torrent();
+	let mut config = Config::load_or_exit();
+	if config.file.is_some() {
+		config.info_hash = generate_torrent(&config).expect("Error generating torrent.");
+		println!(
+			"Info Hash: {}",
+			config
+				.info_hash
+				.iter()
+				.map(|x| format!("{:x}", x))
+				.collect::<Vec<_>>()
+				.concat()
+		)
+	}
 	let (sender, reciever) = mpsc::channel();
-	let info_hash = [
-		0x41, 0xb4, 0xad, 0xfd, 0x66, 0xd4, 0x56, 0xfe, 0xbb, 0xe8, 0xf5, 0x8f, 0x6b, 0xbc, 0x55,
-		0xe5, 0xcb, 0xfd, 0x45, 0x92,
-	];
 
-	let server = tracker::Server {
-		// 41b4adfd66d456febbe8f58f6bbc55e5cbfd4592
-		info_hash,
+	let server = Server {
+		config: config.clone(),
 		sender,
 	};
+
 	thread::spawn(move || server.listen().unwrap());
 
 	for addr in reciever {
-		println!("{:?}", addr);
+		if let Err(e) = config.notify.run(addr.ip()) {
+			eprintln!(
+				"Error running {:?} with ip {}: {}",
+				config.notify,
+				addr.ip(),
+				e
+			);
+		}
 	}
 }

@@ -10,10 +10,7 @@ fn to_dec_digit(byte: u8) -> Option<u8> {
 	}
 }
 
-pub fn decode<T>(bytes: &mut T) -> Result<Data, DataParseError>
-where
-	T: Iterator<Item = u8>,
-{
+pub fn decode(bytes: &mut impl Iterator<Item = u8>) -> Result<Data, DataParseError> {
 	let start = match bytes.next() {
 		Some(b) => b,
 		None => return Err(DataParseError("Empty string.")),
@@ -134,9 +131,10 @@ where
 	}
 }
 
-pub fn try_decode_from<T, D>(data: &mut D) -> Result<Result<T, T::Error>, DataParseError>
+pub fn try_decode_from<T>(
+	data: &mut impl Iterator<Item = u8>,
+) -> Result<Result<T, T::Error>, DataParseError>
 where
-	D: Iterator<Item = u8>,
 	T: TryFrom<Data>,
 {
 	Ok(<T as TryFrom<Data>>::try_from(decode(data)?))
