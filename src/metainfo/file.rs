@@ -1,4 +1,4 @@
-use crate::bencode::{impl_try_from_data, Data, Dictionary};
+use crate::bencode::{impl_try_from_data_dict, Data, Dictionary};
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct File {
@@ -21,31 +21,15 @@ impl TryFrom<Dictionary> for File {
 	type Error = ();
 
 	fn try_from(mut value: Dictionary) -> Result<Self, Self::Error> {
-		let length = match value.remove("length") {
-			Some(Data::UInt(u)) => u,
-			_ => return Err(()),
-		};
+		let length = value.remove_as("length")?;
 
-		let md5sum = match value.remove("md5sum") {
-			Some(Data::Bytes(b)) => b.as_slice().try_into().map(|c| Some(c)).map_err(|_| ())?,
-			None => None,
-			_ => return Err(()),
-		};
+		let md5sum = value
+			.remove_as_opt("md5sum")?
+			.map(Vec::try_into)
+			.transpose()
+			.map_err(|_| ())?;
 
-		let path = match value.remove("path") {
-			Some(Data::List(l)) => {
-				let mut vec = Vec::new();
-				for item in l {
-					if let Data::Bytes(b) = item {
-						vec.push(b);
-					} else {
-						return Err(());
-					}
-				}
-				vec
-			}
-			_ => return Err(()),
-		};
+		let path = value.remove_as("path")?;
 
 		Ok(Self {
 			length,
@@ -55,7 +39,7 @@ impl TryFrom<Dictionary> for File {
 	}
 }
 
-impl_try_from_data!(File);
+impl_try_from_data_dict!(File);
 
 #[cfg(test)]
 mod tests {

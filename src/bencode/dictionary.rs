@@ -40,6 +40,27 @@ impl Dictionary {
 	pub fn remove(&mut self, key: &str) -> Option<Data> {
 		self.0.remove(key.as_bytes())
 	}
+
+	pub fn remove_as<T>(&mut self, key: &str) -> Result<T, T::Error>
+	where
+		T: TryFrom<Data>,
+		T::Error: Default,
+	{
+		match self.0.remove(key.as_bytes()) {
+			Some(x) => x.try_into(),
+			None => Err(T::Error::default()),
+		}
+	}
+
+	pub fn remove_as_opt<T>(&mut self, key: &str) -> Result<Option<T>, T::Error>
+	where
+		T: TryFrom<Data>,
+	{
+		match self.0.remove(key.as_bytes()) {
+			Some(x) => x.try_into().map(|x| Some(x)),
+			None => Ok(None),
+		}
+	}
 }
 
 impl IntoIterator for Dictionary {

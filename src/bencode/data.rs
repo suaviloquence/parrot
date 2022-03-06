@@ -98,7 +98,53 @@ impl<T: Into<Dictionary>> From<T> for Data {
 	}
 }
 
+impl TryFrom<Data> for u64 {
+	type Error = ();
+
+	fn try_from(value: Data) -> Result<Self, Self::Error> {
+		match value {
+			Data::UInt(u) => Ok(u),
+			Data::Int(i) => i.try_into().map_err(|_| ()),
+			_ => Err(()),
+		}
+	}
+}
+
+impl TryFrom<Data> for i64 {
+	type Error = ();
+
+	fn try_from(value: Data) -> Result<Self, Self::Error> {
+		match value {
+			Data::Int(i) => Ok(i),
+			Data::UInt(u) => u.try_into().map_err(|_| ()),
+			_ => Err(()),
+		}
+	}
+}
+
 macro_rules! impl_try_from_data {
+	($T: ident, $path: path) => {
+		impl TryFrom<Data> for $T {
+			type Error = ();
+
+			fn try_from(data: Data) -> Result<Self, Self::Error> {
+				if let $path(x) = data {
+					Ok(x)
+				} else {
+					Err(())
+				}
+			}
+		}
+	};
+}
+
+impl_try_from_data!(Dictionary, Data::Dict);
+// type VecD = Vec<Data>;
+// impl_try_from_data!(VecD, Data::List);
+type Vecu8 = Vec<u8>;
+impl_try_from_data!(Vecu8, Data::Bytes);
+
+macro_rules! impl_try_from_data_dict {
 	($T: ident) => {
 		impl TryFrom<Data> for $T {
 			type Error = ();
@@ -114,4 +160,20 @@ macro_rules! impl_try_from_data {
 	};
 }
 
-pub(crate) use impl_try_from_data;
+impl<T> TryFrom<Data> for Vec<T>
+where
+	T: TryFrom<Data>,
+	T::Error: Default,
+{
+	type Error = T::Error;
+
+	fn try_from(value: Data) -> Result<Self, Self::Error> {
+		if let Data::List(list) = value {
+			list.into_iter().map(T::try_from).collect()
+		} else {
+			Err(T::Error::default())
+		}
+	}
+}
+
+pub(crate) use impl_try_from_data_dict;

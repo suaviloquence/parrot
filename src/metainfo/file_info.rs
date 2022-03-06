@@ -1,4 +1,4 @@
-use crate::bencode::{impl_try_from_data, Data, Dictionary};
+use crate::bencode::{impl_try_from_data_dict, Data, Dictionary};
 
 use super::File;
 
@@ -41,30 +41,19 @@ impl TryFrom<Dictionary> for FileInfo {
 	type Error = ();
 
 	fn try_from(mut data: Dictionary) -> Result<Self, Self::Error> {
-		let name = match data.remove("name") {
-			Some(Data::Bytes(b)) => b,
-			_ => return Err(()),
-		};
+		let name = data.remove_as("name")?;
+		let files = data.remove_as("files");
 
-		if let Some(Data::List(l)) = data.remove("files") {
-			let mut files = Vec::new();
-
-			for file in l {
-				files.push(File::try_from(file)?);
-			}
-
+		if let Ok(files) = files {
 			Ok(Self::Multi { name, files })
 		} else {
-			let length = match data.remove("length") {
-				Some(Data::UInt(u)) => u,
-				_ => return Err(()),
-			};
+			let length = data.remove_as("length")?;
 
-			let md5sum = match data.remove("md5sum") {
-				Some(Data::Bytes(b)) => b.try_into().map(|c| Some(c)).map_err(|_| ())?,
-				None => None,
-				_ => return Err(()),
-			};
+			let md5sum = data
+				.remove_as_opt("md5sum")?
+				.map(Vec::try_into)
+				.transpose()
+				.map_err(|_| ())?;
 
 			Ok(Self::Single {
 				name,
@@ -75,7 +64,7 @@ impl TryFrom<Dictionary> for FileInfo {
 	}
 }
 
-impl_try_from_data!(FileInfo);
+impl_try_from_data_dict!(FileInfo);
 
 #[cfg(test)]
 mod tests {

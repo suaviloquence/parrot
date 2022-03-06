@@ -1,11 +1,11 @@
 use super::Info;
-use crate::bencode::{impl_try_from_data, Data, Dictionary};
+use crate::bencode::{impl_try_from_data_dict, Data, Dictionary};
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct MetaInfo {
 	pub info: Info,
 	pub announce: Vec<u8>,
-	pub announce_list: Option<Vec<u8>>,
+	pub announce_list: Option<Vec<Vec<u8>>>,
 	pub creation_date: Option<u64>,
 	pub comment: Option<Vec<u8>>,
 	pub created_by: Option<Vec<u8>>,
@@ -32,45 +32,19 @@ impl TryFrom<Dictionary> for MetaInfo {
 	type Error = ();
 
 	fn try_from(mut value: Dictionary) -> Result<Self, Self::Error> {
-		let info = match value.remove("info") {
-			Some(data) => Info::try_from(data)?,
-			_ => return Err(()),
-		};
+		let info = value.remove_as("info")?;
 
-		let announce = match value.remove("announce") {
-			Some(Data::Bytes(s)) => s,
-			_ => return Err(()),
-		};
+		let announce = value.remove_as("announce")?;
 
-		let announce_list = match value.remove("announce-list") {
-			Some(Data::Bytes(s)) => Some(s),
-			None => None,
-			_ => return Err(()),
-		};
+		let announce_list = value.remove_as_opt("announce-list")?;
 
-		let comment = match value.remove("comment") {
-			Some(Data::Bytes(s)) => Some(s),
-			None => None,
-			_ => return Err(()),
-		};
+		let comment = value.remove_as_opt("comment")?;
 
-		let created_by = match value.remove("created by") {
-			Some(Data::Bytes(s)) => Some(s),
-			None => None,
-			_ => return Err(()),
-		};
+		let created_by = value.remove_as_opt("created by")?;
 
-		let creation_date = match value.remove("creation date") {
-			Some(Data::UInt(u)) => Some(u),
-			None => None,
-			_ => return Err(()),
-		};
+		let creation_date = value.remove_as_opt("creation date")?;
 
-		let encoding = match value.remove("encoding") {
-			Some(Data::Bytes(s)) => Some(s),
-			None => None,
-			_ => return Err(()),
-		};
+		let encoding = value.remove_as_opt("encoding")?;
 
 		Ok(Self {
 			info,
@@ -84,7 +58,7 @@ impl TryFrom<Dictionary> for MetaInfo {
 	}
 }
 
-impl_try_from_data!(MetaInfo);
+impl_try_from_data_dict!(MetaInfo);
 
 #[cfg(test)]
 mod tests {
@@ -128,13 +102,13 @@ mod tests {
 				}
 			},
 			announce: "no".into(),
-			announce_list: Some("12345".into()),
+			announce_list: Some(vec!["12345".into()]),
 			comment: Some("no comment".into()),
 			created_by: Some("me".into()),
 			creation_date: Some(0),
 			encoding: Some("utf-8".into()),
 		}),
-		b"d8:announce2:no13:announce-list5:123457:comment10:no comment10:created by2:me13:creation datei0e8:encoding5:utf-84:infod5:filesle4:name6:folder12:piece lengthi5e6:pieces6:1234567:privatei0eee"
+		b"d8:announce2:no13:announce-listl5:12345e7:comment10:no comment10:created by2:me13:creation datei0e8:encoding5:utf-84:infod5:filesle4:name6:folder12:piece lengthi5e6:pieces6:1234567:privatei0eee"
 	);
 	}
 
@@ -166,7 +140,7 @@ mod tests {
 		);
 
 		assert_eq!(try_decode_from(
-			"d8:announce2:no13:announce-list5:123457:comment10:no comment10:created by2:me13:creation datei0e8:encoding5:utf-84:infod5:filesle4:name6:folder12:piece lengthi5e6:pieces6:1234567:privatei0eee"
+			"d8:announce2:no13:announce-listl5:12345e7:comment10:no comment10:created by2:me13:creation datei0e8:encoding5:utf-84:infod5:filesle4:name6:folder12:piece lengthi5e6:pieces6:1234567:privatei0eee"
 			),
 			Ok(Ok(MetaInfo {
 				info: Info {
@@ -179,7 +153,7 @@ mod tests {
 					}
 				},
 				announce: "no".into(),
-				announce_list: Some("12345".into()),
+				announce_list: Some(vec!["12345".into()]),
 				comment: Some("no comment".into()),
 				created_by: Some("me".into()),
 				creation_date: Some(0),

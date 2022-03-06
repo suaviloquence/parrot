@@ -1,4 +1,4 @@
-use crate::bencode::{impl_try_from_data, Data, Dictionary};
+use crate::bencode::{impl_try_from_data_dict, Data, Dictionary};
 
 use super::FileInfo;
 
@@ -25,21 +25,17 @@ impl TryFrom<Dictionary> for Info {
 	type Error = ();
 
 	fn try_from(mut data: Dictionary) -> Result<Self, Self::Error> {
-		let piece_length = match data.remove("piece length") {
-			Some(Data::UInt(u)) => u,
-			_ => return Err(()),
-		};
-		let pieces = match data.remove("pieces") {
-			Some(Data::Bytes(b)) => b,
-			_ => return Err(()),
-		};
+		let piece_length = data.remove_as("piece length")?;
+		let pieces = data.remove_as("pieces")?;
+
 		let private = match data.remove("private") {
 			Some(Data::UInt(u)) => Some(u != 0),
+			Some(Data::Int(i)) => Some(i != 0),
 			Some(_) => return Err(()),
 			None => None,
 		};
 
-		let file_info = FileInfo::try_from(Data::Dict(data))?;
+		let file_info = data.try_into()?;
 
 		Ok(Self {
 			piece_length,
@@ -50,7 +46,7 @@ impl TryFrom<Dictionary> for Info {
 	}
 }
 
-impl_try_from_data!(Info);
+impl_try_from_data_dict!(Info);
 
 #[cfg(test)]
 mod tests {
