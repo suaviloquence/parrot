@@ -12,13 +12,7 @@ impl Into<Dictionary> for Peer {
 	fn into(self) -> Dictionary {
 		let mut dict = Dictionary::new();
 		dict.insert("peer id", self.peer_id);
-		dict.insert(
-			"ip",
-			match self.ip {
-				IpAddr::V4(v4) => Vec::from(v4.octets()),
-				IpAddr::V6(v6) => Vec::from(v6.octets()),
-			},
-		);
+		dict.insert("ip", format!("{:?}", self.ip));
 		dict.insert("port", Data::UInt(self.port as u64));
 		dict
 	}
@@ -82,5 +76,13 @@ impl Into<Dictionary> for TrackerResponse {
 			}
 			Self::Err(s) => Dictionary::from(vec![("failure reason", s)]),
 		}
+	}
+}
+
+#[cfg(test)]
+mod test {
+	#[test]
+	fn test_peer_into() {
+		todo!()
 	}
 }
