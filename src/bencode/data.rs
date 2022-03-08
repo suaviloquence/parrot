@@ -163,15 +163,17 @@ macro_rules! impl_try_from_data_dict {
 impl<T> TryFrom<Data> for Vec<T>
 where
 	T: TryFrom<Data>,
-	T::Error: Default,
 {
-	type Error = T::Error;
+	type Error = ();
 
 	fn try_from(value: Data) -> Result<Self, Self::Error> {
 		if let Data::List(list) = value {
-			list.into_iter().map(T::try_from).collect()
+			list.into_iter()
+				.map(T::try_from)
+				.collect::<Result<_, _>>()
+				.map_err(|_| ())
 		} else {
-			Err(T::Error::default())
+			Err(())
 		}
 	}
 }
