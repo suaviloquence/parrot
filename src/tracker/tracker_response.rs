@@ -81,8 +81,48 @@ impl Into<Dictionary> for TrackerResponse {
 
 #[cfg(test)]
 mod test {
+	use crate::{
+		bencode::encode,
+		bytes::assert_bytes_eq,
+		tracker::{Peer, Peers, TrackerResponse},
+	};
+	use std::net::IpAddr;
+
 	#[test]
 	fn test_peer_into() {
-		todo!()
+		assert_bytes_eq(
+			encode(Peer {
+				ip: IpAddr::V4("127.0.0.1".parse().unwrap()),
+				peer_id: [b'1'; 20],
+				port: 16384,
+			}),
+			"d2:ip9:127.0.0.17:peer id20:111111111111111111114:porti16384ee",
+		);
+
+		assert_bytes_eq(encode(Peer {
+			ip: IpAddr::V6("::1".parse().unwrap()),
+			peer_id: [0; 20],
+			port: 25565
+		}), "d2:ip3:::17:peer id20:\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x004:porti25565ee")
+	}
+
+	#[test]
+	fn test_trackerresponse_into() {
+		assert_bytes_eq(
+			encode(TrackerResponse::Ok {
+				interval: 300,
+				min_interval: None,
+				tracker_id: None,
+				complete: 1,
+				incomplete: 0,
+				peers: Peers::Full(vec![Peer {
+					ip: IpAddr::V4("127.0.0.1".parse().unwrap()),
+					peer_id: [b'1'; 20],
+					port: 16384,
+				}]),
+				warning_message: None,
+			}),
+			"d8:completei1e10:incompletei0e8:intervali300e5:peersld2:ip9:127.0.0.17:peer id20:111111111111111111114:porti16384eeee"
+		);
 	}
 }
