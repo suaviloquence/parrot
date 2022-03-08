@@ -145,7 +145,7 @@ mod tests {
 			"GET /announce?info_hash=11111111111111111111&peer_id=magicnumber123456789&port=25565&uploaded=4&downloaded=5&left=6 HTTP/1.1\r\n",
 			"127.0.0.1:3000",
 			"192.168.7.160:50000",
-			format!("HTTP/1.1 200 OK\r\nContent-Length: 157\r\nContent-Type: text/plain\r\n\r\nd8:completei1e10:incompletei0e8:intervali300e5:peersld2:ip4:\x7f\x00\x00\x017:peer id20:{}4:porti16384eee15:warning message24:Your IP is 192.168.7.160e\r\n", String::from_utf8(peer::peer_id().to_vec()).unwrap())
+			format!("HTTP/1.1 200 OK\r\nContent-Length: 162\r\nContent-Type: text/plain\r\n\r\nd8:completei1e10:incompletei0e8:intervali300e5:peersld2:ip9:127.0.0.17:peer id20:{}4:porti16384eee15:warning message24:Your IP is 192.168.7.160e\r\n", String::from_utf8(peer::peer_id().to_vec()).unwrap())
 		);
 		assert_eq!(rx.try_recv(), Ok("192.168.7.160:50000".parse().unwrap()));
 
