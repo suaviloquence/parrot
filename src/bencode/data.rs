@@ -76,7 +76,7 @@ impl From<&str> for Data {
 
 impl<T: Into<Data>> From<Vec<T>> for Data {
 	fn from(d: Vec<T>) -> Self {
-		Data::List(d.into_iter().map(|x| x.into()).collect())
+		Data::List(d.into_iter().map(T::into).collect())
 	}
 }
 

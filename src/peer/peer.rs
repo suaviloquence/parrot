@@ -19,7 +19,7 @@ impl Peer {
 		let listener = TcpListener::bind(SocketAddr::from(([0, 0, 0, 0], self.config.peer_port)))?;
 
 		for stream in listener.incoming() {
-			let stream = dbg!(stream)?;
+			let stream = stream?;
 			self.handle_connection(stream.local_addr()?, stream.peer_addr()?, stream)?;
 		}
 		Ok(())
@@ -33,7 +33,6 @@ impl Handler for Peer {
 		remote: SocketAddr,
 		mut stream: impl Read + Write,
 	) -> std::io::Result<()> {
-		println!("{:?}", remote);
 		let mut plen = [0; 1];
 		stream.read_exact(&mut plen)?;
 
@@ -56,15 +55,6 @@ impl Handler for Peer {
 
 		let mut peer_id = [0; 20];
 		stream.read_exact(&mut peer_id)?;
-
-		println!(
-			"protocol: {:?}\n reserved: {:?}\ninfo_hash: {:?}\npeer_id: {:?}",
-			protocol, reserved, info_hash, peer_id
-		);
-
-		if info_hash != self.config.info_hash {
-			return Ok(());
-		}
 
 		println!("Peer: {:?}", remote);
 

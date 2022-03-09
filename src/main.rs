@@ -90,7 +90,15 @@ fn generate_torrent(config: &Config) -> io::Result<[u8; 20]> {
 		info: info.clone(),
 	};
 
-	fs::write("file.torrent", bencode::encode(meta_info))?;
+	fs::write(
+		format!(
+			"{}.torrent",
+			path.file_stem()
+				.unwrap_or(path.file_name().expect("Path has no file name."))
+				.to_string_lossy()
+		),
+		bencode::encode(meta_info),
+	)?;
 	Ok(info_hash)
 }
 
@@ -110,13 +118,31 @@ fn main() {
 	thread::spawn(move || server.listen().unwrap());
 
 	for addr in reciever {
-		if let Err(e) = config.notify.run(addr.ip()) {
-			eprintln!(
-				"Error running {:?} with ip {}: {}",
-				config.notify,
-				addr.ip(),
-				e
-			);
+		match config.notify.run(addr.ip()) {
+			Ok(mut c) => {
+				let notify = format!("{:?}", config.notify);
+				thread::spawn(move || match c.wait() {
+					Ok(code) => {
+						if !code.success() {
+							eprintln!(
+								"{} exited with exit code {} (ip {})",
+								notify,
+								code.code().unwrap_or(-1),
+								addr.ip()
+							)
+						}
+					}
+					Err(e) => eprintln!("Error running {} with ip {}: {}", notify, addr.ip(), e),
+				});
+			}
+			Err(e) => {
+				eprintln!(
+					"Error running {:?} with ip {}: {}",
+					config.notify,
+					addr.ip(),
+					e
+				)
+			}
 		}
 	}
 }

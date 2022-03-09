@@ -1,5 +1,5 @@
 use std::io::{Read, Write};
-use std::net::{SocketAddr, TcpListener};
+use std::net::{IpAddr, SocketAddr, SocketAddrV4, TcpListener};
 use std::sync::mpsc::Sender;
 use std::thread;
 
@@ -81,17 +81,24 @@ impl Handler for Server {
 				.send(remote)
 				.expect("Error sending message from server thread.");
 
+			let peers =
+				if let (&Some(true), IpAddr::V4(v4)) = (&tracker_request.compact, local.ip()) {
+					Peers::create_compact(vec![SocketAddrV4::new(v4, self.config.peer_port)])
+				} else {
+					Peers::Full(vec![super::Peer {
+						peer_id: peer::peer_id(),
+						ip: local.ip(),
+						port: self.config.peer_port,
+					}])
+				};
+
 			bencode::encode(TrackerResponse::Ok {
 				interval: 300,
 				min_interval: None,
 				tracker_id: None, // TODO
 				complete: 1,
 				incomplete: 0,
-				peers: Peers::Full(vec![super::Peer {
-					peer_id: peer::peer_id(),
-					ip: local.ip(),
-					port: self.config.peer_port,
-				}]),
+				peers,
 				warning_message: Some(format!("Your IP is {}", remote.ip())),
 			})
 		} else {

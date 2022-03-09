@@ -45,18 +45,14 @@ mod test {
 		remote: &'static str,
 		result: impl Into<Vec<u8>>,
 	) {
+		use crate::bytes::assert_bytes_eq;
+
 		let mut stream = MockStream::create(read.into());
 		handler
 			.handle_connection(local.parse().unwrap(), remote.parse().unwrap(), &mut stream)
 			.expect("Error handling connection: ");
 
-		let result = result.into();
-		if stream.write != result {
-			assert_eq!(
-				String::from_utf8_lossy(stream.write.as_slice()),
-				String::from_utf8_lossy(result.as_slice())
-			)
-		}
+		assert_bytes_eq(stream.write, result);
 	}
 }
 

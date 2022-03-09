@@ -113,7 +113,8 @@ impl TryFrom<QueryString> for TrackerRequest {
 			None => return Err(()),
 		};
 
-		let compact = value.remove("compact").map(|s| s != vec![b'0']);
+		// let compact = value.remove("compact").map(|s| s != vec![b'0']);
+		let compact = Some(false);
 		let no_peer_id = value.remove("no_peer_id").map(|s| s != vec![b'0']);
 		let event = value
 			.remove("event")

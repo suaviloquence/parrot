@@ -1,7 +1,8 @@
-use std::net::IpAddr;
+use std::net::{IpAddr, SocketAddrV4};
 
 use crate::bencode::{Data, Dictionary};
 
+#[derive(Clone, Debug)]
 pub struct Peer {
 	pub peer_id: [u8; 20],
 	pub ip: IpAddr,
@@ -18,6 +19,7 @@ impl Into<Dictionary> for Peer {
 	}
 }
 
+#[derive(Clone, Debug)]
 pub enum Peers {
 	Full(Vec<Peer>),
 	/// first 4 bytes are ipv4, last 2 are port
@@ -26,13 +28,26 @@ pub enum Peers {
 
 impl Into<Data> for Peers {
 	fn into(self) -> Data {
-		Data::List(match self {
-			Self::Full(peers) => peers.into_iter().map(Data::from).collect(),
-			Self::Compact(bytes) => bytes.into_iter().map(Data::from).collect(),
-		})
+		match self {
+			Self::Full(peers) => Data::from(peers),
+			Self::Compact(bytes) => bytes.into_iter().flatten().collect::<Vec<u8>>().into(),
+		}
 	}
 }
 
+impl Peers {
+	pub fn create_compact(addrs: Vec<SocketAddrV4>) -> Self {
+		let mut vec = Vec::new();
+		for addr in addrs {
+			let ip = addr.ip().octets();
+			let port = addr.port().to_be_bytes();
+			vec.push([ip[0], ip[1], ip[2], ip[3], port[0], port[1]]);
+		}
+		Self::Compact(vec)
+	}
+}
+
+#[derive(Clone, Debug)]
 pub enum TrackerResponse {
 	Ok {
 		interval: u64,
