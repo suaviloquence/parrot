@@ -118,30 +118,39 @@ fn main() {
 	thread::spawn(move || server.listen().unwrap());
 
 	for addr in reciever {
-		match config.notify.run(addr.ip()) {
-			Ok(mut c) => {
-				let notify = format!("{:?}", config.notify);
-				thread::spawn(move || match c.wait() {
-					Ok(code) => {
-						if !code.success() {
-							eprintln!(
-								"{} exited with exit code {} (ip {})",
-								notify,
-								code.code().unwrap_or(-1),
-								addr.ip()
-							)
+		if addr.ip() != config.expected_ip {
+			println!(
+				"Unexpected IP {:?} (expected {:?})",
+				addr.ip(),
+				&config.expected_ip
+			);
+			match config.notify.run(addr.ip()) {
+				Ok(mut c) => {
+					let notify = format!("{:?}", config.notify);
+					thread::spawn(move || match c.wait() {
+						Ok(code) => {
+							if !code.success() {
+								eprintln!(
+									"{} exited with exit code {} (ip {})",
+									notify,
+									code.code().unwrap_or(-1),
+									addr.ip()
+								)
+							}
 						}
-					}
-					Err(e) => eprintln!("Error running {} with ip {}: {}", notify, addr.ip(), e),
-				});
-			}
-			Err(e) => {
-				eprintln!(
-					"Error running {:?} with ip {}: {}",
-					config.notify,
-					addr.ip(),
-					e
-				)
+						Err(e) => {
+							eprintln!("Error running {} with ip {}: {}", notify, addr.ip(), e)
+						}
+					});
+				}
+				Err(e) => {
+					eprintln!(
+						"Error running {:?} with ip {}: {}",
+						config.notify,
+						addr.ip(),
+						e
+					)
+				}
 			}
 		}
 	}

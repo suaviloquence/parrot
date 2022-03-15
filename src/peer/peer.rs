@@ -78,12 +78,12 @@ mod tests {
 	use std::sync::mpsc;
 
 	use super::Peer;
-	use crate::{config::test_config, test::assert_stream_eq};
+	use crate::{config::Config, test::assert_stream_eq};
 
 	#[test]
 	fn test_handle_connection() {
 		let (sx, rx) = mpsc::channel();
-		let mut config = test_config();
+		let mut config = Config::default();
 		config.info_hash = [1; 20];
 		config.peer_port = 25565;
 		assert_stream_eq(

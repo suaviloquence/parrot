@@ -4,17 +4,6 @@ use std::{
 	process::{self, Child, Command},
 };
 
-#[derive(Debug, PartialEq)]
-pub enum Error {
-	EmptyAction,
-	MissingCommand,
-	MissingInfoHash,
-	MissingArgument,
-	InvalidArgument,
-	UnexpectedArgument,
-	InvalidFile,
-}
-
 #[derive(Debug, PartialEq, Clone)]
 pub enum Token {
 	String(String),
@@ -42,12 +31,12 @@ impl Action {
 }
 
 impl TryFrom<String> for Action {
-	type Error = Error;
+	type Error = &'static str;
 
 	fn try_from(value: String) -> Result<Self, Self::Error> {
 		let mut split = value.split_whitespace();
 
-		let exec = split.next().ok_or(Error::EmptyAction)?.to_string();
+		let exec = split.next().ok_or("Empty action field.")?.to_string();
 
 		let args = split
 			.map(|arg| match arg {
@@ -68,19 +57,21 @@ pub struct Config {
 	pub peer_port: u16,
 	pub info_hash: [u8; 20],
 	pub file: Option<PathBuf>,
+	pub expected_ip: IpAddr,
 }
 
-fn next_arg(args: &mut impl Iterator<Item = String>) -> Result<String, Error> {
+fn next_arg(args: &mut impl Iterator<Item = String>) -> Result<String, &'static str> {
 	match args.next() {
 		Some(s) => Ok(s),
-		None => Err(Error::MissingArgument),
+		None => Err("Missing expected argument."),
 	}
 }
 
 impl Config {
-	pub fn load(mut args: impl Iterator<Item = String>) -> Result<Self, Error> {
-		let mut command = Err(Error::MissingCommand);
-		let mut info_hash = Err(Error::MissingInfoHash);
+	pub fn load(mut args: impl Iterator<Item = String>) -> Result<Self, &'static str> {
+		let mut command = Err("Missing command.");
+		let mut info_hash = Err("Missing info hash.");
+		let mut expected_ip = Err("Missing expected ip.");
 
 		// DEFAULTS
 		let mut host = "127.0.0.1".to_string();
@@ -92,7 +83,7 @@ impl Config {
 			match args.next().as_deref() {
 				Some("-n" | "--notify") => match args.next() {
 					Some(c) => command = Action::try_from(c),
-					None => return Err(Error::MissingArgument),
+					None => return Err("Missing value for \"notify\""),
 				},
 				Some("-i" | "--info") => {
 					let arg = next_arg(&mut args)?;
@@ -104,21 +95,23 @@ impl Config {
 								// max of a and b is both 15, so the max of this expression is (15 * 16) + 15 = 255 < 2^8
 								info_vec.push(((a * 16) + b).try_into().unwrap())
 							}
-							_ => return Err(Error::InvalidArgument),
+							_ => return Err("Invalid info hash."),
 						}
 					}
-					info_hash = info_vec.try_into().map_err(|_| Error::InvalidArgument);
+					info_hash = info_vec
+						.try_into()
+						.map_err(|_| "Invalid length of info hash.");
 				}
 				Some("-h" | "--host") => host = next_arg(&mut args)?,
 				Some("-s" | "--server-port") => {
 					server_port = next_arg(&mut args)?
 						.parse()
-						.map_err(|_| Error::InvalidArgument)?
+						.map_err(|_| "Invalid server port (must be a number 0 < port < 65536)")?
 				}
 				Some("-p" | "--peer-port") => {
 					peer_port = next_arg(&mut args)?
 						.parse()
-						.map_err(|_| Error::InvalidArgument)?
+						.map_err(|_| "Invalid peer port (must be a number 0 < port < 65536)")?
 				}
 				Some("-f" | "--file") => match args.next() {
 					Some(f) => {
@@ -128,12 +121,17 @@ impl Config {
 							info_hash = Ok([0; 20]); // placeholder: if file is set, info_hash will always be overwritten
 							 // TODO find a more elegant solution
 						} else {
-							return Err(Error::InvalidFile);
+							return Err("Argument is not a file.");
 						}
 					}
-					None => return Err(Error::MissingArgument),
+					None => return Err("Missing value for \"file\""),
 				},
-				Some(_) => return Err(Error::UnexpectedArgument),
+				Some("-e" | "--expected-ip") => {
+					expected_ip = next_arg(&mut args)?
+						.parse()
+						.map_err(|_| "Invalid IP address.")
+				}
+				Some(_) => return Err("Unexpected token."),
 				None => break,
 			}
 		}
@@ -145,6 +143,7 @@ impl Config {
 			server_port,
 			peer_port,
 			file,
+			expected_ip: expected_ip?,
 		})
 	}
 
@@ -169,17 +168,20 @@ run {} --help to print a help menu.
 }
 
 #[cfg(test)]
-pub fn test_config() -> Config {
-	Config {
-		notify: Action {
-			exec: String::from(""),
-			args: vec![],
-		},
-		host: "127.0.0.1".into(),
-		server_port: 3000,
-		peer_port: 16384,
-		info_hash: [1; 20],
-		file: None,
+impl Default for Config {
+	fn default() -> Self {
+		Self {
+			notify: Action {
+				exec: String::from(""),
+				args: vec![],
+			},
+			host: "127.0.0.1".into(),
+			server_port: 3000,
+			peer_port: 16384,
+			info_hash: [1; 20],
+			file: None,
+			expected_ip: "127.0.0.1".parse().unwrap(),
+		}
 	}
 }
 
@@ -189,7 +191,20 @@ mod tests {
 
 	use crate::config::Config;
 
-	use super::{Action, Error, Token};
+	use super::{Action, Token};
+
+	macro_rules! args {
+		($($arg: expr$(, )?)*) => {{
+			#[allow(unused_mut)]
+			let mut vec = Vec::new();
+
+			$(
+				vec.push($arg.to_string());
+			)*
+
+			vec.into_iter()
+		}};
+	}
 
 	#[test]
 	fn test_action_from() {
@@ -201,7 +216,7 @@ mod tests {
 			})
 		);
 
-		assert_eq!(Action::try_from(String::new()), Err(Error::EmptyAction));
+		assert_eq!(Action::try_from(String::new()), Err("Empty action field."));
 
 		assert_eq!(
 			Action::try_from("abc de %IP".to_string()),
@@ -239,7 +254,9 @@ mod tests {
 					"-n",
 					"ls -la",
 					"--info",
-					"ffffffffffffffffffffffffffffffffffffffff"
+					"ffffffffffffffffffffffffffffffffffffffff",
+					"--expected-ip",
+					"127.0.0.1"
 				]
 				.into_iter()
 				.map(&str::to_string)
@@ -254,29 +271,30 @@ mod tests {
 				server_port: 3000,
 				peer_port: 16384,
 				file: None,
+				expected_ip: "127.0.0.1".parse().unwrap(),
 			})
 		);
 
-		assert_eq!(Config::load([].into_iter()), Err(Error::MissingCommand));
+		assert_eq!(Config::load([].into_iter()), Err("Missing command."));
 
 		assert_eq!(
 			Config::load(["-n"].into_iter().map(&str::to_string)),
-			Err(Error::MissingArgument)
+			Err("Missing value for \"notify\"")
 		);
 
 		assert_eq!(
 			Config::load(["-n", ""].into_iter().map(&str::to_string)),
-			Err(Error::EmptyAction)
+			Err("Empty action field.")
 		);
 
 		assert_eq!(
 			Config::load(["-n", "ls -la"].into_iter().map(&str::to_string)),
-			Err(Error::MissingInfoHash)
+			Err("Missing info hash.")
 		);
 
 		assert_eq!(
 			Config::load(["-n", "ls -la", "-i"].into_iter().map(&str::to_string)),
-			Err(Error::MissingArgument)
+			Err("Missing expected argument.")
 		);
 
 		assert_eq!(
@@ -285,7 +303,7 @@ mod tests {
 					.into_iter()
 					.map(&str::to_string)
 			),
-			Err(Error::InvalidArgument)
+			Err("Invalid length of info hash.")
 		);
 
 		assert_eq!(
@@ -294,7 +312,7 @@ mod tests {
 					.into_iter()
 					.map(&str::to_string)
 			),
-			Err(Error::InvalidArgument)
+			Err("Invalid info hash.")
 		);
 
 		assert_eq!(
@@ -303,7 +321,7 @@ mod tests {
 					.into_iter()
 					.map(&str::to_string)
 			),
-			Err(Error::InvalidFile)
+			Err("Argument is not a file.")
 		);
 
 		// directory
@@ -313,7 +331,19 @@ mod tests {
 					.into_iter()
 					.map(&str::to_string)
 			),
-			Err(Error::InvalidFile)
+			Err("Argument is not a file.")
 		);
+
+		assert_eq!(
+			Config::load(args!(
+				"-n",
+				"true",
+				"-i",
+				"0000000000000000000000000000000000000000",
+				"-e",
+				"127.3"
+			)),
+			Err("Invalid IP address.")
+		)
 	}
 }

@@ -10,6 +10,7 @@ where:
 
 - `-i` (or `--info-hash`) is the SHA1 hash of the bencoded info dictionary of the file torrent (see `-f` on how to generate this).
 - `-n` (or `--notify`) is the command to run when an unexpected IP is detected. In the command, `%IP` is replaced by the unexpected IP.
+  - you should probably use a shell script with %IP as $1 because the command divides by whitespace doesn't respect quoted strings (for now)
 - `-f` (or `--file`) optionally creates a torrent file and info hash for a given file.
 - `-h` (or `--host`) sets the host of the torrent tracker (default if omitted: `127.0.0.1`)
 - `-s` (or `--server-port`) sets the port the tracker listens on (default: `3000`)

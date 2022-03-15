@@ -124,14 +124,14 @@ mod tests {
 	use std::sync::mpsc;
 
 	use super::Server;
-	use crate::{config::test_config, peer, test::assert_stream_eq};
+	use crate::{config::Config, peer, test::assert_stream_eq};
 
 	#[test]
 	fn test_handle_req() {
 		let (sx, rx) = mpsc::channel();
 		assert_stream_eq(
 			Server {
-				config: test_config(),
+				config: Config::default(),
 				sender: sx.clone(),
 			},
 			"GET / HTTP/1.1\r\n\r\n",
@@ -142,7 +142,7 @@ mod tests {
 
 		rx.try_recv().expect_err("Unexpected IP in server.");
 
-		let mut config = test_config();
+		let mut config = Config::default();
 		config.info_hash = [b'1'; 20];
 
 		assert_stream_eq(
@@ -156,7 +156,7 @@ mod tests {
 		);
 		assert_eq!(rx.try_recv(), Ok("192.168.7.160:50000".parse().unwrap()));
 
-		config = test_config();
+		config = Config::default();
 		config.info_hash = [b'2'; 20];
 		assert_stream_eq(
 			Server { sender: sx.clone(),
