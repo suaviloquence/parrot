@@ -50,6 +50,13 @@ impl TryFrom<String> for Action {
 }
 
 #[derive(Debug, PartialEq, Clone)]
+pub enum PeerHost {
+	IP(IpAddr),
+	HOST,
+	INFER,
+}
+
+#[derive(Debug, PartialEq, Clone)]
 pub struct Config {
 	pub notify: Action,
 	pub host: String,
@@ -58,6 +65,7 @@ pub struct Config {
 	pub info_hash: [u8; 20],
 	pub file: Option<PathBuf>,
 	pub expected_ip: IpAddr,
+	pub peer_host: PeerHost,
 }
 
 fn next_arg(args: &mut impl Iterator<Item = String>) -> Result<String, &'static str> {
@@ -78,6 +86,7 @@ impl Config {
 		let mut server_port = 3000;
 		let mut peer_port = 16384;
 		let mut file = None;
+		let mut peer_host = PeerHost::INFER;
 
 		loop {
 			match args.next().as_deref() {
@@ -131,6 +140,17 @@ impl Config {
 						.parse()
 						.map_err(|_| "Invalid IP address.")
 				}
+				Some("--peer-host") => {
+					peer_host = match next_arg(&mut args).as_deref() {
+						Ok("infer") => Ok(PeerHost::INFER),
+						Ok("host") => Ok(PeerHost::HOST),
+						Ok(ip) => ip
+							.parse()
+							.map(|ip| PeerHost::IP(ip))
+							.map_err(|_| "Invalid IP address"),
+						_ => Err("Invalid peer host."),
+					}?
+				}
 				Some(_) => return Err("Unexpected token."),
 				None => break,
 			}
@@ -140,6 +160,7 @@ impl Config {
 			notify: command?,
 			info_hash: info_hash?,
 			host,
+			peer_host,
 			server_port,
 			peer_port,
 			file,
@@ -176,6 +197,7 @@ impl Default for Config {
 				args: vec![],
 			},
 			host: "127.0.0.1".into(),
+			peer_host: PeerHost::INFER,
 			server_port: 3000,
 			peer_port: 16384,
 			info_hash: [1; 20],
@@ -189,7 +211,7 @@ impl Default for Config {
 mod tests {
 	use std::net::IpAddr;
 
-	use crate::config::Config;
+	use crate::config::{Config, PeerHost};
 
 	use super::{Action, Token};
 
@@ -268,6 +290,7 @@ mod tests {
 					args: vec![Token::String("-la".into())],
 				},
 				host: "127.0.0.1".into(),
+				peer_host: PeerHost::INFER,
 				server_port: 3000,
 				peer_port: 16384,
 				file: None,

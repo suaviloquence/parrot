@@ -27,12 +27,14 @@ impl Peer {
 }
 
 impl Handler for Peer {
+	type Ok = ();
+
 	fn handle_connection(
 		&self,
 		_: SocketAddr,
 		remote: SocketAddr,
 		mut stream: impl Read + Write,
-	) -> std::io::Result<()> {
+	) -> std::io::Result<Self::Ok> {
 		let mut plen = [0; 1];
 		stream.read_exact(&mut plen)?;
 

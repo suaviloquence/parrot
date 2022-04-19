@@ -4,8 +4,9 @@ use std::sync::mpsc::Sender;
 use std::thread;
 
 use super::{Peers, TrackerRequest, TrackerResponse};
-use crate::config::Config;
+use crate::config::{Config, PeerHost};
 use crate::peer::{self, Peer};
+use crate::tracker::IP;
 use crate::{bencode, Handler};
 
 pub struct Server {
@@ -26,20 +27,29 @@ impl Server {
 		thread::spawn(move || peer.listen().unwrap());
 
 		for stream in listener.incoming() {
-			let stream = stream?;
-			self.handle_connection(stream.local_addr()?, stream.peer_addr()?, stream)?;
+			let mut stream = stream?;
+			match self.handle_connection(stream.local_addr()?, stream.peer_addr()?, &mut stream) {
+				Ok(true) => (),
+				Ok(false) => write!(&mut stream, "HTTP/1.1 400 BAD REQUEST\r\n\r\n")?,
+				Err(e) => {
+					eprintln!("Error handling server connection: {:?}", e);
+					write!(&mut stream, "HTTP/1.1 500 INTERNAL SERVER ERROR\r\n\r\n")?;
+				}
+			};
 		}
 		Ok(())
 	}
 }
 
 impl Handler for Server {
+	type Ok = bool;
+
 	fn handle_connection(
 		&self,
 		local: SocketAddr,
 		remote: SocketAddr,
 		mut stream: impl Read + Write,
-	) -> std::io::Result<()> {
+	) -> std::io::Result<Self::Ok> {
 		let mut data = Vec::new();
 		{
 			const BUF_SIZE: usize = 1024;
@@ -57,22 +67,25 @@ impl Handler for Server {
 			}
 		}
 
-		let data = String::from_utf8(data).expect("UTF-8 conversion error");
+		let data = match String::from_utf8(data) {
+			Ok(d) => d,
+			Err(_) => return Ok(false),
+		};
 
 		let path = match data.strip_prefix("GET /announce?") {
 			Some(p) => p,
-			None => return write!(&mut stream, "HTTP/1.1 400 BAD REQUEST\r\n\r\n"),
+			None => return Ok(false),
 		};
 
 		let query_string = match path.split_once(" ") {
 			Some((x, _)) => x,
-			_ => return write!(&mut stream, "HTTP/1.1 400 BAD REQUEST\r\n\r\n"),
+			_ => return Ok(false),
 		};
 
 		let tracker_request =
 			match super::decode(query_string).map(|qs| TrackerRequest::try_from(qs)) {
 				Ok(Ok(t_r)) => t_r,
-				_ => return write!(&mut stream, "HTTP/1.1 400 BAD REQUEST\r\n\r\n"),
+				_ => return Ok(false),
 			};
 		let mut body = if self.config.info_hash == tracker_request.info_hash {
 			println!("Server: {:?}", remote);
@@ -81,16 +94,24 @@ impl Handler for Server {
 				.send(remote)
 				.expect("Error sending message from server thread.");
 
-			let peers =
-				if let (&Some(true), IpAddr::V4(v4)) = (&tracker_request.compact, local.ip()) {
+			let ip = match self.config.peer_host {
+				PeerHost::HOST => IP::STRING(self.config.host.clone()),
+				PeerHost::IP(ip) => IP::IP(ip),
+				PeerHost::INFER => IP::IP(local.ip()),
+			};
+
+			println!("Sending peer with IP {:?}", ip);
+
+			let peers = match (&tracker_request.compact, ip) {
+				(&Some(true), IP::IP(IpAddr::V4(v4))) => {
 					Peers::create_compact(vec![SocketAddrV4::new(v4, self.config.peer_port)])
-				} else {
-					Peers::Full(vec![super::Peer {
-						peer_id: peer::peer_id(),
-						ip: local.ip(),
-						port: self.config.peer_port,
-					}])
-				};
+				}
+				(_, ip) => Peers::Full(vec![super::Peer {
+					peer_id: peer::peer_id(),
+					ip,
+					port: self.config.peer_port,
+				}]),
+			};
 
 			bencode::encode(TrackerResponse::Ok {
 				interval: 300,
@@ -115,7 +136,7 @@ impl Handler for Server {
 		bytes.push(b'\r');
 		bytes.push(b'\n');
 
-		stream.write_all(&bytes)
+		stream.write_all(&bytes).map(|_| true)
 	}
 }
 

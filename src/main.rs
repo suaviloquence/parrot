@@ -25,12 +25,13 @@ mod test;
 mod tracker;
 
 pub trait Handler {
+	type Ok;
 	fn handle_connection(
 		&self,
 		local: SocketAddr,
 		remote: SocketAddr,
 		stream: impl Read + Write,
-	) -> io::Result<()>;
+	) -> io::Result<Self::Ok>;
 }
 
 fn generate_torrent(config: &Config) -> io::Result<[u8; 20]> {

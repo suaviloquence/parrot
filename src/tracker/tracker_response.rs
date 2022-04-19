@@ -3,9 +3,15 @@ use std::net::{IpAddr, SocketAddrV4};
 use crate::bencode::{Data, Dictionary};
 
 #[derive(Clone, Debug)]
+pub enum IP {
+	IP(IpAddr),
+	STRING(String),
+}
+
+#[derive(Clone, Debug)]
 pub struct Peer {
 	pub peer_id: [u8; 20],
-	pub ip: IpAddr,
+	pub ip: IP,
 	pub port: u16,
 }
 
@@ -13,7 +19,13 @@ impl Into<Dictionary> for Peer {
 	fn into(self) -> Dictionary {
 		let mut dict = Dictionary::new();
 		dict.insert("peer id", self.peer_id);
-		dict.insert("ip", format!("{:?}", self.ip));
+		dict.insert(
+			"ip",
+			match self.ip {
+				IP::IP(ip) => format!("{:?}", ip),
+				IP::STRING(s) => s,
+			},
+		);
 		dict.insert("port", Data::UInt(self.port as u64));
 		dict
 	}
@@ -101,13 +113,14 @@ mod test {
 		bytes::assert_bytes_eq,
 		tracker::{Peer, Peers, TrackerResponse},
 	};
-	use std::net::IpAddr;
+
+	use super::IP;
 
 	#[test]
 	fn test_peer_into() {
 		assert_bytes_eq(
 			encode(Peer {
-				ip: IpAddr::V4("127.0.0.1".parse().unwrap()),
+				ip: IP::STRING("127.0.0.1".into()),
 				peer_id: [b'1'; 20],
 				port: 16384,
 			}),
@@ -115,7 +128,7 @@ mod test {
 		);
 
 		assert_bytes_eq(encode(Peer {
-			ip: IpAddr::V6("::1".parse().unwrap()),
+			ip: IP::STRING("127.0.0.1".into()),
 			peer_id: [0; 20],
 			port: 25565
 		}), "d2:ip3:::17:peer id20:\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x004:porti25565ee")
@@ -131,7 +144,7 @@ mod test {
 				complete: 1,
 				incomplete: 0,
 				peers: Peers::Full(vec![Peer {
-					ip: IpAddr::V4("127.0.0.1".parse().unwrap()),
+					ip: IP::STRING("127.0.0.1".into()),
 					peer_id: [b'1'; 20],
 					port: 16384,
 				}]),
