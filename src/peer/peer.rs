@@ -1,5 +1,5 @@
 use std::{
-	io::{Read, Write},
+	io::{self, Read, Write},
 	net::{SocketAddr, TcpListener},
 	sync::mpsc::Sender,
 };
@@ -7,6 +7,16 @@ use std::{
 use crate::{config::Config, Handler};
 
 use super::{Handshake, Protocol};
+
+macro_rules! read_exact {
+	($stream: expr, $buf: expr) => {
+		if let Err(e) = $stream.read_exact(&mut $buf) {
+			if e.kind() != io::ErrorKind::UnexpectedEof {
+				eprintln!("Error reading from peer: {:?}", e);
+			}
+		};
+	};
+}
 
 pub struct Peer {
 	pub config: Config,
@@ -19,8 +29,18 @@ impl Peer {
 		let listener = TcpListener::bind(SocketAddr::from(([0, 0, 0, 0], self.config.peer_port)))?;
 
 		for stream in listener.incoming() {
-			let stream = stream?;
-			self.handle_connection(stream.local_addr()?, stream.peer_addr()?, stream)?;
+			let stream = match stream {
+				Ok(s) => s,
+				Err(e) => {
+					eprintln!("Error getting peer stream: {:?}", e);
+					continue;
+				}
+			};
+			if let Err(e) =
+				self.handle_connection(stream.local_addr()?, stream.peer_addr()?, stream)
+			{
+				eprintln!("Error handling peer connection: {:?}", e);
+			};
 		}
 		Ok(())
 	}
@@ -36,16 +56,16 @@ impl Handler for Peer {
 		mut stream: impl Read + Write,
 	) -> std::io::Result<Self::Ok> {
 		let mut plen = [0; 1];
-		stream.read_exact(&mut plen)?;
+		read_exact!(stream, plen);
 
 		let mut protocol = vec![0; plen[0] as usize];
-		stream.read_exact(&mut protocol)?;
+		read_exact!(stream, protocol);
 
 		let mut reserved = [0; 8];
-		stream.read_exact(&mut reserved)?;
+		read_exact!(stream, reserved);
 
 		let mut info_hash = [0; 20];
-		stream.read_exact(&mut info_hash)?;
+		read_exact!(stream, info_hash);
 
 		if info_hash != self.config.info_hash {
 			println!(
@@ -56,7 +76,7 @@ impl Handler for Peer {
 		}
 
 		let mut peer_id = [0; 20];
-		stream.read_exact(&mut peer_id)?;
+		read_exact!(stream, peer_id);
 
 		println!("Peer: {:?}", remote);
 
