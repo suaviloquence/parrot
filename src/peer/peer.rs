@@ -14,6 +14,7 @@ macro_rules! read_exact {
 			if e.kind() != io::ErrorKind::UnexpectedEof {
 				eprintln!("Error reading from peer: {:?}", e);
 			}
+			return Ok(());
 		};
 	};
 }
